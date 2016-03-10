@@ -1,0 +1,5 @@
+#!/bin/sh
+
+lttng stop carTest
+lttng destroy carTest
+
