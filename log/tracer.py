@@ -17,7 +17,7 @@ def loadAllTraces(filepath):
         
     return col
 
-def startEventToList(event):
+def startEventToList(event, exitCode = -1):
     dic = {}
     dic['timestamp'] = event.timestamp
     dic['startTime'] = event.datetime
@@ -25,7 +25,7 @@ def startEventToList(event):
     dic['interestLifetime'] = event['interest_lifetime']
     dic['maxRetries'] = event['max_retries']
     dic['mustBeFresh'] = event['must_be_fresh']
-    
+    dic['exitCode'] = exitCode
     return dic
 
 def getSessions(filepath):
@@ -41,13 +41,18 @@ def getSessions(filepath):
                 lastStartEvent = startEventToList(event)
             else :
                 lastStartEvent = startEventToList(event)
+        elif event.name == 'chunksLog:cat_stopped' :
+           if lastStartEvent != None:
+                lastStartEvent['exitCode'] = event['exit_code']
+                sessions.append([lastStartEvent, event.timestamp])
+                lastStartEvent = None
     
     if lastStartEvent != None :
         sessions.append([lastStartEvent, col.timestamp_end])
     
     return sessions
 
-def chunksStatistics(filepath, start, stop):
+def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     col = loadAllTraces(filepath)
     
     if start != -1 and stop != -1 :
@@ -58,6 +63,11 @@ def chunksStatistics(filepath, start, stop):
 
     segmentsDic = {}
     segmentsInfo = {}
+    bytesReceivedTimes = {}
+    bytesReceivedSecTimes = {}
+    numBytes = 0
+    curBytes = 0
+    firstTimeData = -1
     # get events timestamp per segment (chunks)
     for event in colEvents:
         if event.name.startswith('chunksLog:') :
@@ -74,6 +84,20 @@ def chunksStatistics(filepath, start, stop):
             elif event.name == 'chunksLog:interest_sent' or event.name == 'chunksLog:data_received' or event.name == 'chunksLog:interest_nack':
                 segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, event.timestamp)
                 for field in event.items() :
+                    if field[0] == 'received_bytes' :
+                        if firstTimeData == -1 :
+                            firstTimeData = event.timestamp / 1e9
+                        
+                        if int((event.timestamp / 1e9 ) -  firstTimeData) not in bytesReceivedSecTimes :
+                            curBytes = field[1]/1000
+                            bytesReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curBytes)
+                        else :
+                            curBytes += field[1]/1000 ##TODO use float
+                            bytesReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curBytes 
+                            
+                        
+                        numBytes += int(field[1]/1000)
+                        bytesReceivedTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), numBytes) #TODO
                     segmentsInfo.setdefault(event['segment_number'],{}).setdefault(event.name, {}).setdefault(field[0], field[1])
     
     # Insert segment used in discovery phase 
@@ -87,7 +111,7 @@ def chunksStatistics(filepath, start, stop):
     
     retriveTimes = [] # time to retrieve for each segments (from the interest sent to data received)
     timeoutRetries = [] # number of timeout for each segments
-    bytesReceived = [] 
+    bytesReceived = []
     for segmentNo, segmentInfo in segmentsDic.items() :
         
         # Populatate received segmetns time list
@@ -120,20 +144,20 @@ def chunksStatistics(filepath, start, stop):
     
     totTime = (stopTimestamp - startTimestamp)/ 1000000000
     print('\n----------- Overall -----------')
-    print('Total time (s): ' + str(totTime))
-    print('Number of segments: ' + str(len(segmentsDic)))
-    print('Total received bytes: ' + str(mathBytes.sum()))
-    print('Speed (KB/s): ' + str((mathBytes.sum()/1000)/totTime))
-    print('\n----------- Retrieve times -----------')
-    print('Min (ms): ' + str(mathTimes.min() / 1000000))
-    print('Max (ms): ' + str(mathTimes.max() / 1000000))
-    print('Mean (ms): ' + str(mathTimes.mean() / 1000000))
-    print('Dev. std. (ms): ' + str(mathTimes.std() / 1000000))
-    print('\n----------- Timeouts -----------')
-    print('Min : ' + str(mathTimeout.min()))
-    print('Max : ' + str(mathTimeout.max()))
-    print('Mean : ' + str(mathTimeout.mean()))
-    print('Dev. std. : ' + str(mathTimeout.std()))
+    print('Total time (s)          : {:.1f}'.format(totTime))
+    print('Number of segments      : {:d}'.format(len(segmentsDic)))
+    print('Total received data (MB): {:.3f}'.format(mathBytes.sum()/1000000))
+    print('Speed (KB/s)            : {:.3f}'.format((mathBytes.sum()/1000)/totTime))
+    print('\n--------- Retrieve times ---------')
+    print('Min (ms)             : {:.1f}'.format(mathTimes.min() / 1000000))
+    print('Max (ms)             : {:.1f}'.format(mathTimes.max() / 1000000))
+    print('Mean (ms)            : {:.1f}'.format(mathTimes.mean() / 1000000))
+    print('Dev. std. (ms)       : {:.1f}'.format(mathTimes.std() / 1000000))
+    print('\n---------- Timeouts ----------')
+    print('Min                  : {:.1f}'.format(mathTimeout.min()))
+    print('Max                  : {:.1f}'.format(mathTimeout.max()))
+    print('Mean                 : {:.1f}'.format(mathTimeout.mean()))
+    print('Dev. std.            : {:.1f}'.format(mathTimeout.std()))
     
     trace1 = go.Scatter(
         x=list(range(0, len(retriveTimes) - 1)),
@@ -169,14 +193,103 @@ def chunksStatistics(filepath, start, stop):
             })
     
     data = [trace1, mean]
-    
     fig = go.Figure(data=data, layout=layout)
-    plot(fig , filename='graph1.html')
+    plot(fig , filename= name + '.html')
+    
+    ################
+    mathBytesT = np.array(list(bytesReceivedTimes.keys()))
+    mathBytesTSpeed = np.array(list(bytesReceivedTimes.values()))
+    
+    bytesTime = go.Scatter(
+        x =  mathBytesT,
+        y =  mathBytesTSpeed ,
+        name = 'B transf'
+    )
+    
+    layoutT = {
+        'title' : 'Retrieve time',
+        'shapes': []
+    }
+    
+    wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp) 
+    for seg in wlanSegT :
+        if (seg[0] / 1e9) < firstTimeData :
+            startX = 0
+        else :
+            startX = (seg[0] / 1e9) - firstTimeData
+            
+        if (seg[1] / 1e9) < firstTimeData :
+            endX = 0
+        else :
+            endX = (seg[1] / 1e9) - firstTimeData
+            
+        if endX != 0 :
+            layoutT['shapes'].append(
+                {
+                    'type': 'rect',
+                    'x0': startX,
+                    'y0': 0,
+                    'x1': endX,
+                    'y1': mathBytesTSpeed.max(),
+                    'line': {
+                        'color': 'rgba(128, 0, 128, 0)',
+                        'width': 2,
+                    },
+                    'fillcolor': 'rgba(93, 191, 63, 0.3)',
+                })
+    
+    dataTime = [bytesTime]
+    figT = go.Figure(data=dataTime, layout=layoutT)
+    plot(figT , filename= name + 'Times.html')
+    
+    mathBytesTSec = np.array(list(bytesReceivedTimes.keys()))
+    mathBytesTSecSpeed = np.array(list(bytesReceivedSecTimes.values()))
+    
+    layoutT2 = {
+        'title' : 'Retrieve time',
+        'shapes': []
+    }
+    
+    for seg in wlanSegT :
+        if (seg[0] / 1e9) < firstTimeData :
+            startX = 0
+        else :
+            startX = (seg[0] / 1e9) - firstTimeData
+            
+        if (seg[1] / 1e9) < firstTimeData :
+            endX = 0
+        else :
+            endX = (seg[1] / 1e9) - firstTimeData
+            
+        if endX != 0 :
+            layoutT2['shapes'].append(
+                {
+                    'type': 'rect',
+                    'x0': startX,
+                    'y0': 0,
+                    'x1': endX,
+                    'y1': mathBytesTSecSpeed.max(),
+                    'line': {
+                        'color': 'rgba(128, 0, 128, 0)',
+                        'width': 2,
+                    },
+                    'fillcolor': 'rgba(93, 191, 63, 0.3)',
+                })
+    
+    bytesTimeSec = go.Scatter(
+        x =  mathBytesTSec,
+        y =  mathBytesTSecSpeed ,
+        name = 'KBs Speed'
+    )
+    
+    dataTimeSec = [bytesTimeSec]
+    figT2 = go.Figure(data=dataTimeSec, layout=layoutT2)
+    plot(figT2 , filename= name + 'TimesSec.html')
     
 def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
     wlanStatus = []
     lastState = [startTimestamp, -1]
-    for event in col.events :
+    for event in col.events_timestamps(startTimestamp, stopTimestamp) :
         if not event.name.startswith('chunksLog:') :
             if event.name == 'mgmtLog:network_state' and  event['interface_name'] == 'wlan0' :
                 if event['interface_state'] == 'running' :
