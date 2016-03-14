@@ -13,3 +13,14 @@ sleep 4
 
 ./nfdc register ndn/fr/lip6/testchunks/ 256
 ./nfdc register ndn/fr/lip6/testchunks/ 259
+
+echo "Enter q to exit"
+read text
+while [ "$text" != "q" ]
+do 
+  echo "Enter q to exit"
+  read text
+  if [ "$text" == "q" ]; then
+    killall nfd
+  fi
+done

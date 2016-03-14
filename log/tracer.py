@@ -143,6 +143,7 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     mathBytes = np.array(bytesReceived)   # TODO use directly timeoutReties
     
     totTime = (stopTimestamp - startTimestamp)/ 1000000000
+    
     print('\n----------- Overall -----------')
     print('Total time (s)          : {:.1f}'.format(totTime))
     print('Number of segments      : {:d}'.format(len(segmentsDic)))
@@ -159,6 +160,23 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     print('Mean                 : {:.1f}'.format(mathTimeout.mean()))
     print('Dev. std.            : {:.1f}'.format(mathTimeout.std()))
     
+    stat = []
+    stat.append(('\n----------- Overall -----------', -1))
+    stat.append(('Total time((s))))         : ', totTime))
+    stat.append(('Number of segments      : ', len(segmentsDic)))
+    stat.append(('Total received data((MB)): ', mathBytes.sum()/1000000))
+    stat.append(('Speed((KB/s))))           : ', (mathBytes.sum()/1000)/totTime))
+    stat.append(('\n--------- Retrieve times ---------', -1))
+    stat.append(('Min((ms))))            : ', mathTimes.min()/ 1000000))
+    stat.append(('Max((ms))))            : ', mathTimes.max()/ 1000000))
+    stat.append(('Mean((ms))))           : ', mathTimes.mean()/ 1000000))
+    stat.append(('Dev. std.((ms))))      : ', mathTimes.std()/ 1000000))
+    stat.append(('\n---------- Timeouts ----------', -1))
+    stat.append(('Min                  : ', mathTimeout.min()))
+    stat.append(('Max                  : ', mathTimeout.max()))
+    stat.append(('Mean                 : ', mathTimeout.mean()))
+    stat.append(('Dev. std.            : ', mathTimeout.std()))
+    
     trace1 = go.Scatter(
         x=list(range(0, len(retriveTimes) - 1)),
         y=mathTimes / 1000000
@@ -171,7 +189,10 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     )
     
     layout = {
+        'autosize' : 'false',
         'yaxis' : dict(range=[0, (mathTimes.mean() / 1000000) * 2]),
+        'width' : '700',
+        'height' : '500',
         'title' : 'Retrieve time',
         'shapes': []
     }
@@ -191,10 +212,25 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
                 },
                 'fillcolor': 'rgba(93, 191, 63, 0.3)',
             })
+        
+        
+    htmlStat = "<div style = 'float: left'><table>"
+    for value in stat :
+        if value[1] == -1 : #TODO very bad 
+            htmlStat += "<tr><td colspan='2'>" + value[0] + "</td></tr>"
+        else:
+            htmlStat += "<tr><td>" + value[0] + "</td><td>" + str(value[1]) + "</td></tr>"
+    htmlStat += "</table></div>"
+    
+    resultsFile = open('results.html','w')
+    
+    resultsFile.write(htmlStat)
     
     data = [trace1, mean]
     fig = go.Figure(data=data, layout=layout)
-    plot(fig , filename= name + '.html')
+    resultsFile.write("<div style = 'float: left'>")
+    resultsFile.write(plot(fig , output_type='div', include_plotlyjs='true'))
+    resultsFile.write("</div>")
     
     ################
     mathBytesT = np.array(list(bytesReceivedTimes.keys()))
@@ -207,6 +243,8 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     )
     
     layoutT = {
+        'width' : '700',
+        'height' : '500',
         'title' : 'Retrieve time',
         'shapes': []
     }
@@ -240,12 +278,17 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     
     dataTime = [bytesTime]
     figT = go.Figure(data=dataTime, layout=layoutT)
-    plot(figT , filename= name + 'Times.html')
+    resultsFile.write("<div style = 'float: left'>")
+    resultsFile.write(plot(figT , include_plotlyjs='false', output_type='div'))
+    resultsFile.write("</div>")
+    
     
     mathBytesTSec = np.array(list(bytesReceivedTimes.keys()))
     mathBytesTSecSpeed = np.array(list(bytesReceivedSecTimes.values()))
     
     layoutT2 = {
+        'width' : '700',
+        'height' : '500',
         'title' : 'Retrieve time',
         'shapes': []
     }
@@ -284,7 +327,15 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     
     dataTimeSec = [bytesTimeSec]
     figT2 = go.Figure(data=dataTimeSec, layout=layoutT2)
-    plot(figT2 , filename= name + 'TimesSec.html')
+    #plot(figT2 , filename= name + 'TimesSec.html')
+    resultsFile.write("<div style = 'float: left'>")
+    resultsFile.write(plot(figT2 , include_plotlyjs='false', output_type='div'))
+    resultsFile.write("</div>")
+    
+    
+    resultsFile.close()
+    
+    print("Results written to: " + resultsFile.name)
     
 def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
     wlanStatus = []

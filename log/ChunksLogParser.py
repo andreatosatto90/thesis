@@ -36,7 +36,7 @@ if __name__ == '__main__':
         print()
         i += 1
         
-    try:
+    #try:
         if len(sessions) > 1 :
             sessionNo = int(input('Insert session number: '))
         else :
@@ -46,5 +46,5 @@ if __name__ == '__main__':
         else :
             print ("Running with session " + str(sessionNo) + "...")
             tracer.chunksStatistics(sys.argv[1], sessions[sessionNo][0]['timestamp'], sessions[sessionNo][1], 'test ' + timestampToDate(ses[0]['timestamp']))
-    except ValueError :
-        print("ERROR: Insert a number")
+    #except ValueError :
+        #print("ERROR: Insert a number")
