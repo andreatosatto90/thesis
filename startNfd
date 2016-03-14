@@ -1,0 +1,15 @@
+#!/bin/bash
+
+./nfd &
+
+sleep 4
+
+# Other strategies:
+#  - only-wlan
+#  - only-cellular
+#  - predefined-weight (Now is 50% - 50%)
+
+./nfdc set-strategy /ndn/fr/lip6/ /localhost/nfd/strategy/preferred-wlan
+
+./nfdc register ndn/fr/lip6/testchunks/ 256
+./nfdc register ndn/fr/lip6/testchunks/ 259
