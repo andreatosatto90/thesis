@@ -1,9 +1,7 @@
 import sys
 import babeltrace.reader
 import numpy as np
-from plotly.offline import plot
-import plotly.graph_objs as go
-import copy
+import graphs
 
 import os
 
@@ -52,14 +50,13 @@ def getSessions(filepath):
     
     return sessions
 
-def chunksStatistics(filepath, start, stop, name = 'testNoName'):
+def chunksStatistics(filepath, start, stop, session):
     col = loadAllTraces(filepath)
     
     if start != -1 and stop != -1 :
         colEvents = col.events_timestamps(start, stop)
     else :
         colEvents = col.events
-
 
     segmentsDic = {}
     segmentsInfo = {}
@@ -68,6 +65,7 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     numBytes = 0
     curBytes = 0
     firstTimeData = -1
+    lastTimeData = -1
     # get events timestamp per segment (chunks)
     for event in colEvents:
         if event.name.startswith('chunksLog:') :
@@ -98,8 +96,25 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
                         
                         numBytes += int(field[1]/1000)
                         bytesReceivedTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), numBytes) #TODO
+                        
+                        if lastTimeData < int((event.timestamp / 1e9 ) -  firstTimeData) :
+                            lastTimeData = int((event.timestamp / 1e9 ) -  firstTimeData)
                     segmentsInfo.setdefault(event['segment_number'],{}).setdefault(event.name, {}).setdefault(field[0], field[1])
     
+    # insert 0 where values is missing
+    for i in range (0, lastTimeData) :
+        if i not in bytesReceivedSecTimes :
+            bytesReceivedSecTimes.setdefault(i,0)
+            
+    # insert last value where values is missing
+    lastValue = 0
+    for i in range (0, lastTimeData) :
+        if i not in bytesReceivedTimes :
+            print (str(i))
+            bytesReceivedTimes.setdefault(i, lastValue)
+        lastValue = bytesReceivedTimes[i]
+            
+            
     # Insert segment used in discovery phase 
     segmentsDic.setdefault(discoverySegment,{}).setdefault('chunksLog:data_received', discoveryData)
     segmentsDic.setdefault(discoverySegment,{}).setdefault('chunksLog:interest_sent', discoveryInterest)
@@ -160,182 +175,13 @@ def chunksStatistics(filepath, start, stop, name = 'testNoName'):
     print('Mean                 : {:.1f}'.format(mathTimeout.mean()))
     print('Dev. std.            : {:.1f}'.format(mathTimeout.std()))
     
-    stat = []
-    stat.append(('\n----------- Overall -----------', -1))
-    stat.append(('Total time((s))))         : ', totTime))
-    stat.append(('Number of segments      : ', len(segmentsDic)))
-    stat.append(('Total received data((MB)): ', mathBytes.sum()/1000000))
-    stat.append(('Speed((KB/s))))           : ', (mathBytes.sum()/1000)/totTime))
-    stat.append(('\n--------- Retrieve times ---------', -1))
-    stat.append(('Min((ms))))            : ', mathTimes.min()/ 1000000))
-    stat.append(('Max((ms))))            : ', mathTimes.max()/ 1000000))
-    stat.append(('Mean((ms))))           : ', mathTimes.mean()/ 1000000))
-    stat.append(('Dev. std.((ms))))      : ', mathTimes.std()/ 1000000))
-    stat.append(('\n---------- Timeouts ----------', -1))
-    stat.append(('Min                  : ', mathTimeout.min()))
-    stat.append(('Max                  : ', mathTimeout.max()))
-    stat.append(('Mean                 : ', mathTimeout.mean()))
-    stat.append(('Dev. std.            : ', mathTimeout.std()))
+    wlanSeg = wlanStateBySegmentNo(col, startTimestamp, stopTimestamp)
+    wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp)
     
-    trace1 = go.Scatter(
-        x=list(range(0, len(retriveTimes) - 1)),
-        y=mathTimes / 1000000
-    )
-    
-    mean = go.Scatter(
-        x=list(range(0, len(retriveTimes) - 1)),
-        y= [str(mathTimes.mean() / 1000000) for i in range (0, len(retriveTimes) - 1)],
-        name = 'Mean'
-    )
-    
-    layout = {
-        'autosize' : 'false',
-        'yaxis' : dict(range=[0, (mathTimes.mean() / 1000000) * 2]),
-        'width' : '700',
-        'height' : '500',
-        'title' : 'Retrieve time',
-        'shapes': []
-    }
-    
-    wlanSeg = wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) 
-    for seg in wlanSeg :
-        layout['shapes'].append(
-            {
-                'type': 'rect',
-                'x0': seg[0],
-                'y0': 0,
-                'x1': seg[1],
-                'y1': mathTimes.max() / 1000000,
-                'line': {
-                    'color': 'rgba(128, 0, 128, 0)',
-                    'width': 2,
-                },
-                'fillcolor': 'rgba(93, 191, 63, 0.3)',
-            })
-        
-        
-    htmlStat = "<div style = 'float: left'><table>"
-    for value in stat :
-        if value[1] == -1 : #TODO very bad 
-            htmlStat += "<tr><td colspan='2'>" + value[0] + "</td></tr>"
-        else:
-            htmlStat += "<tr><td>" + value[0] + "</td><td>" + str(value[1]) + "</td></tr>"
-    htmlStat += "</table></div>"
-    
-    resultsFile = open('results.html','w')
-    
-    resultsFile.write(htmlStat)
-    
-    data = [trace1, mean]
-    fig = go.Figure(data=data, layout=layout)
-    resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(plot(fig , output_type='div', include_plotlyjs='true'))
-    resultsFile.write("</div>")
-    
-    ################
-    mathBytesT = np.array(list(bytesReceivedTimes.keys()))
-    mathBytesTSpeed = np.array(list(bytesReceivedTimes.values()))
-    
-    bytesTime = go.Scatter(
-        x =  mathBytesT,
-        y =  mathBytesTSpeed ,
-        name = 'B transf'
-    )
-    
-    layoutT = {
-        'width' : '700',
-        'height' : '500',
-        'title' : 'Retrieve time',
-        'shapes': []
-    }
-    
-    wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp) 
-    for seg in wlanSegT :
-        if (seg[0] / 1e9) < firstTimeData :
-            startX = 0
-        else :
-            startX = (seg[0] / 1e9) - firstTimeData
-            
-        if (seg[1] / 1e9) < firstTimeData :
-            endX = 0
-        else :
-            endX = (seg[1] / 1e9) - firstTimeData
-            
-        if endX != 0 :
-            layoutT['shapes'].append(
-                {
-                    'type': 'rect',
-                    'x0': startX,
-                    'y0': 0,
-                    'x1': endX,
-                    'y1': mathBytesTSpeed.max(),
-                    'line': {
-                        'color': 'rgba(128, 0, 128, 0)',
-                        'width': 2,
-                    },
-                    'fillcolor': 'rgba(93, 191, 63, 0.3)',
-                })
-    
-    dataTime = [bytesTime]
-    figT = go.Figure(data=dataTime, layout=layoutT)
-    resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(plot(figT , include_plotlyjs='false', output_type='div'))
-    resultsFile.write("</div>")
+    graphs.statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes)
     
     
-    mathBytesTSec = np.array(list(bytesReceivedTimes.keys()))
-    mathBytesTSecSpeed = np.array(list(bytesReceivedSecTimes.values()))
     
-    layoutT2 = {
-        'width' : '700',
-        'height' : '500',
-        'title' : 'Retrieve time',
-        'shapes': []
-    }
-    
-    for seg in wlanSegT :
-        if (seg[0] / 1e9) < firstTimeData :
-            startX = 0
-        else :
-            startX = (seg[0] / 1e9) - firstTimeData
-            
-        if (seg[1] / 1e9) < firstTimeData :
-            endX = 0
-        else :
-            endX = (seg[1] / 1e9) - firstTimeData
-            
-        if endX != 0 :
-            layoutT2['shapes'].append(
-                {
-                    'type': 'rect',
-                    'x0': startX,
-                    'y0': 0,
-                    'x1': endX,
-                    'y1': mathBytesTSecSpeed.max(),
-                    'line': {
-                        'color': 'rgba(128, 0, 128, 0)',
-                        'width': 2,
-                    },
-                    'fillcolor': 'rgba(93, 191, 63, 0.3)',
-                })
-    
-    bytesTimeSec = go.Scatter(
-        x =  mathBytesTSec,
-        y =  mathBytesTSecSpeed ,
-        name = 'KBs Speed'
-    )
-    
-    dataTimeSec = [bytesTimeSec]
-    figT2 = go.Figure(data=dataTimeSec, layout=layoutT2)
-    #plot(figT2 , filename= name + 'TimesSec.html')
-    resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(plot(figT2 , include_plotlyjs='false', output_type='div'))
-    resultsFile.write("</div>")
-    
-    
-    resultsFile.close()
-    
-    print("Results written to: " + resultsFile.name)
     
 def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
     wlanStatus = []
@@ -378,10 +224,3 @@ def wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) :
             lastSeg = [-1, -1]
                     
     return wlanSeg
-    
-if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        msg = 'Usage: python {} TRACEPATH'.format(sys.argv[0])
-        raise ValueError(msg)
-    
-    chunksStatistics(sys.argv[1], -1, -1)
