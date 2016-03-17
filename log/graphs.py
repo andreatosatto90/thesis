@@ -35,9 +35,10 @@ def tableInput(ses) :
     
     return htmlStat
 
-def tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout) :
+def tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedStrategies) :
     stat = []
     stat.append(('Overall', -1))
+    stat.append(('Strategies : ', '<br/>'.join(usedStrategies)))
     stat.append(('Total time (s) : ', totTime))
     stat.append(('Number of segments : ', len(segmentsDic)))
     stat.append(('Total received data (MB): ', mathBytes.sum()/1000000))
@@ -105,7 +106,47 @@ def graphTimesSegments(mathTimes, wlanSeg) :
     fig = go.Figure(data=data, layout=layout)
     
     htmlGraph = "<div>" #style = 'float: left'
-    htmlGraph += plot(fig , output_type='div', include_plotlyjs='true')
+    htmlGraph += plot(fig , output_type='div', include_plotlyjs=True)
+    htmlGraph += "</div>"
+    
+    return htmlGraph
+
+def graphTimeoutSegments(mathTimeout, wlanSeg) :
+    trace1 = go.Bar(
+        x = list(range(0, len(mathTimeout) - 1)),
+        y = mathTimeout,
+        name = 'Number of timeouts'
+    )
+    
+    layout = {
+        'autosize' : 'false',
+        #'yaxis' : dict(range=[0, mathTimeout.mean()]),
+        'width' : '800',
+        'height' : '600',
+        'title' : 'Number of timeout for each segment',
+        'shapes': []
+    }
+    
+    for seg in wlanSeg :
+        layout['shapes'].append(
+            {
+                'type': 'rect',
+                'x0': seg[0],
+                'y0': 0,
+                'x1': seg[1],
+                'y1': mathTimeout.max(),
+                'line': {
+                    'color': 'rgba(128, 0, 128, 0)',
+                    'width': 2,
+                },
+                'fillcolor': 'rgba(93, 191, 63, 0.3)',
+            })
+        
+    data = [trace1]
+    fig = go.Figure(data=data, layout=layout)
+    
+    htmlGraph = "<div>" #style = 'float: left'
+    htmlGraph += plot(fig , output_type='div', include_plotlyjs=False)
     htmlGraph += "</div>"
     
     return htmlGraph
@@ -156,7 +197,7 @@ def graphBytesTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     dataTime = [bytesTime]
     figT = go.Figure(data=dataTime, layout=layoutT)
     htmlGraph = "<div>"
-    htmlGraph += plot(figT , include_plotlyjs='false', output_type='div')
+    htmlGraph += plot(figT , include_plotlyjs=False, output_type='div')
     htmlGraph += "</div>"
     
     return htmlGraph
@@ -220,12 +261,12 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     dataTimeSec = [bytesTimeSec, bytesTime]
     figT2 = go.Figure(data=dataTimeSec, layout=layoutT2)
     htmlGraph = "<div>"
-    htmlGraph += plot(figT2 , include_plotlyjs='false', output_type='div')
+    htmlGraph += plot(figT2 , include_plotlyjs=False, output_type='div')
     htmlGraph += "</div>"
     
     return htmlGraph
 
-def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes) :  
+def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies) :  
 
     resultsFile = open('res_' + str(session[0]['startTime']) + '.html','w')
     
@@ -241,12 +282,13 @@ def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout,
     resultsFile.write(tableInput(session))
     resultsFile.write("</div>")
     resultsFile.write("<div style = 'float: right'>")
-    resultsFile.write(tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout))
+    resultsFile.write(tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedStrategies))
     resultsFile.write("</div>")
     resultsFile.write("</div>")
     
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(graphTimesSegments(mathTimes, wlanSeg))
+    resultsFile.write(graphTimeoutSegments(mathTimeout, wlanSeg))
     resultsFile.write("</div>")
     resultsFile.write("</div>")
     

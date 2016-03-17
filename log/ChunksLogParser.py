@@ -20,7 +20,7 @@ if __name__ == '__main__':
         raise ValueError(msg)
     
     sessions = tracer.getSessions(sys.argv[1])
-    i = 0
+    i = 1
     for ses in sessions :
         errorString = ''
         if (ses[0]['exitCode'] != 0) :
@@ -38,13 +38,18 @@ if __name__ == '__main__':
         
     try:
         if len(sessions) > 1 :
-            sessionNo = int(input('Insert session number: '))
+            sessionNo = int(input('Insert session number (0 to select all): '))
         else :
-            sessionNo = 0;
-        if sessionNo >= len(sessions) :
+            sessionNo = 1;
+        if sessionNo > len(sessions) :
             print("ERROR: no session with specified number")
         else :
-            print ("Running with session " + str(sessionNo) + "...")
-            tracer.chunksStatistics(sys.argv[1], sessions[sessionNo][0]['timestamp'], sessions[sessionNo][1], sessions[sessionNo])
+            if (sessionNo == 0) :
+                for i in range (0, len(sessions)) :
+                    print ("Running with session " + str(i + 1) + "...")
+                    tracer.chunksStatistics(sys.argv[1], sessions[i][0]['timestamp'], sessions[i][1], sessions[i])
+            else :
+                print ("Running with session " + str(sessionNo) + "...")
+                tracer.chunksStatistics(sys.argv[1], sessions[sessionNo - 1][0]['timestamp'], sessions[sessionNo - 1][1], sessions[sessionNo - 1])
     except ValueError :
         print("ERROR: Insert a number")

@@ -66,7 +66,12 @@ def chunksStatistics(filepath, start, stop, session):
     curBytes = 0
     firstTimeData = -1
     lastTimeData = -1
+    
+    discoverySegment = 0
+    discoveryInterest = start
+    discoveryData  =  start
     # get events timestamp per segment (chunks)
+    usedStrategies = []
     for event in colEvents:
         if event.name.startswith('chunksLog:') :
             if event.name == 'chunksLog:interest_discovery' :
@@ -87,19 +92,23 @@ def chunksStatistics(filepath, start, stop, session):
                             firstTimeData = event.timestamp / 1e9
                         
                         if int((event.timestamp / 1e9 ) -  firstTimeData) not in bytesReceivedSecTimes :
-                            curBytes = field[1]/1000
+                            curBytes = float(field[1])/1000
                             bytesReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curBytes)
                         else :
-                            curBytes += field[1]/1000 ##TODO use float
+                            curBytes += float(field[1])/1000 ##TODO use float
                             bytesReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curBytes 
                             
                         
-                        numBytes += int(field[1]/1000)
+                        numBytes += float(field[1])/1000
                         bytesReceivedTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), numBytes) #TODO
                         
                         if lastTimeData < int((event.timestamp / 1e9 ) -  firstTimeData) :
                             lastTimeData = int((event.timestamp / 1e9 ) -  firstTimeData)
                     segmentsInfo.setdefault(event['segment_number'],{}).setdefault(event.name, {}).setdefault(field[0], field[1])
+        elif event.name.startswith('strategyLog:') :
+            if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
+                if event['strategy_name'] not in usedStrategies :
+                    usedStrategies.append(event['strategy_name'])
     
     # insert 0 where values is missing
     for i in range (0, lastTimeData) :
@@ -110,11 +119,9 @@ def chunksStatistics(filepath, start, stop, session):
     lastValue = 0
     for i in range (0, lastTimeData) :
         if i not in bytesReceivedTimes :
-            print (str(i))
             bytesReceivedTimes.setdefault(i, lastValue)
         lastValue = bytesReceivedTimes[i]
-            
-            
+                    
     # Insert segment used in discovery phase 
     segmentsDic.setdefault(discoverySegment,{}).setdefault('chunksLog:data_received', discoveryData)
     segmentsDic.setdefault(discoverySegment,{}).setdefault('chunksLog:interest_sent', discoveryInterest)
@@ -148,7 +155,8 @@ def chunksStatistics(filepath, start, stop, session):
         # Populate byte received
         
         if 'chunksLog:data_received' in segmentInfo :
-            bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['received_bytes'])
+            if segmentNo in segmentsInfo:
+                bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['received_bytes'])
         else :
             bytesReceived.append(0)
             
@@ -159,46 +167,53 @@ def chunksStatistics(filepath, start, stop, session):
     
     totTime = (stopTimestamp - startTimestamp)/ 1000000000
     
-    print('\n----------- Overall -----------')
-    print('Total time (s)          : {:.1f}'.format(totTime))
-    print('Number of segments      : {:d}'.format(len(segmentsDic)))
-    print('Total received data (MB): {:.3f}'.format(mathBytes.sum()/1000000))
-    print('Speed (KB/s)            : {:.3f}'.format((mathBytes.sum()/1000)/totTime))
-    print('\n--------- Retrieve times ---------')
-    print('Min (ms)             : {:.1f}'.format(mathTimes.min() / 1000000))
-    print('Max (ms)             : {:.1f}'.format(mathTimes.max() / 1000000))
-    print('Mean (ms)            : {:.1f}'.format(mathTimes.mean() / 1000000))
-    print('Dev. std. (ms)       : {:.1f}'.format(mathTimes.std() / 1000000))
-    print('\n---------- Timeouts ----------')
-    print('Min                  : {:.1f}'.format(mathTimeout.min()))
-    print('Max                  : {:.1f}'.format(mathTimeout.max()))
-    print('Mean                 : {:.1f}'.format(mathTimeout.mean()))
-    print('Dev. std.            : {:.1f}'.format(mathTimeout.std()))
+    # print('\n----------- Overall -----------')
+    # print('Total time (s)          : {:.1f}'.format(totTime))
+    # print('Number of segments      : {:d}'.format(len(segmentsDic)))
+    # print('Total received data (MB): {:.3f}'.format(mathBytes.sum()/1000000))
+    # print('Speed (KB/s)            : {:.3f}'.format((mathBytes.sum()/1000)/totTime))
+    # print('\n--------- Retrieve times ---------')
+    # print('Min (ms)             : {:.1f}'.format(mathTimes.min() / 1000000))
+    # print('Max (ms)             : {:.1f}'.format(mathTimes.max() / 1000000))
+    # print('Mean (ms)            : {:.1f}'.format(mathTimes.mean() / 1000000))
+    # print('Dev. std. (ms)       : {:.1f}'.format(mathTimes.std() / 1000000))
+    # print('\n---------- Timeouts ----------')
+    # print('Min                  : {:.1f}'.format(mathTimeout.min()))
+    # print('Max                  : {:.1f}'.format(mathTimeout.max()))
+    # print('Mean                 : {:.1f}'.format(mathTimeout.mean()))
+    # print('Dev. std.            : {:.1f}'.format(mathTimeout.std()))
     
     wlanSeg = wlanStateBySegmentNo(col, startTimestamp, stopTimestamp)
     wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp)
     
-    graphs.statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes)
-    
+    if totTime > 0 :
+        graphs.statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies)
+    else :
+        print("Not enough data, skipping results generation for this session")
     
     
     
 def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
     wlanStatus = []
-    lastState = [startTimestamp, -1]
+    lastState = [-2, -1]
     for event in col.events_timestamps(startTimestamp, stopTimestamp) :
         if not event.name.startswith('chunksLog:') :
             if event.name == 'mgmtLog:network_state' and  event['interface_name'] == 'wlan0' :
                 if event['interface_state'] == 'running' :
-                    if (lastState[0] ==  -1) :
+                    if (lastState[0] < 0) :
                         lastState[0] = event.timestamp
                 else :
-                    if (lastState[0] !=  -1 and lastState[1] ==  -1) :
+                    if (lastState[0] > 0 and lastState[1] ==  -1) :
+                        lastState[1] = event.timestamp
+                        wlanStatus.append(lastState)
+                        lastState = [-1, -1]
+                    elif (lastState[0] == -2 and lastState[1] ==  -1 ) : # First running event lost
+                        lastState[0] = startTimestamp
                         lastState[1] = event.timestamp
                         wlanStatus.append(lastState)
                         lastState = [-1, -1]
                     
-    if (lastState[0] !=  -1 and lastState[1] ==  -1) :
+    if (lastState[0] >=  0 and lastState[1] >=  0) :
         lastState[1] = event.timestamp
         wlanStatus.append(lastState)
     
