@@ -2,6 +2,7 @@
 
 lttng create carTest
 lttng enable-event -c NFD -u 'mgmtLog:*'
+lttng enable-event -c NFD -u 'faceLog:*'
 lttng enable-event -c NFD -u 'strategyLog:*'
 lttng enable-event -c chunks -u 'chunksLog:*'
 lttng start carTest

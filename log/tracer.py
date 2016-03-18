@@ -2,8 +2,11 @@ import sys
 import babeltrace.reader
 import numpy as np
 import graphs
+from pyndn import Name
 
 import os
+
+wirelessInterfaces = ['wlan0', 'wlp4s0']
 
 def loadAllTraces(filepath):
     # a trace collection holds one to many traces
@@ -31,19 +34,21 @@ def getSessions(filepath):
     sessions = []
 
     lastStartEvent = None
+    lastEventTimestamp = col.timestamp_begin
     # get events per segment (chunks)
-    for event in col.events:
+    for event in col.events_timestamps(col.timestamp_begin, col.timestamp_end) :
         if event.name == 'chunksLog:cat_started' :
-            if lastStartEvent != None:
-                sessions.append([lastStartEvent, event.timestamp - 1])
+            if lastStartEvent != None :
+                sessions.append([lastStartEvent, lastEventTimestamp])
                 lastStartEvent = startEventToList(event)
             else :
                 lastStartEvent = startEventToList(event)
         elif event.name == 'chunksLog:cat_stopped' :
-           if lastStartEvent != None:
+           if lastStartEvent != None :
                 lastStartEvent['exitCode'] = event['exit_code']
                 sessions.append([lastStartEvent, event.timestamp])
-                lastStartEvent = None
+                lastStartEvent = None   
+        lastEventTimestamp = event.timestamp
     
     if lastStartEvent != None :
         sessions.append([lastStartEvent, col.timestamp_end])
@@ -95,9 +100,8 @@ def chunksStatistics(filepath, start, stop, session):
                             curBytes = float(field[1])/1000
                             bytesReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curBytes)
                         else :
-                            curBytes += float(field[1])/1000 ##TODO use float
-                            bytesReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curBytes 
-                            
+                            curBytes += float(field[1])/1000
+                            bytesReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curBytes  
                         
                         numBytes += float(field[1])/1000
                         bytesReceivedTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), numBytes) #TODO
@@ -109,6 +113,10 @@ def chunksStatistics(filepath, start, stop, session):
             if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
                 if event['strategy_name'] not in usedStrategies :
                     usedStrategies.append(event['strategy_name'])
+                segmentComponent = event['interest_name'].split("?")[0]
+                lol = Name(segmentComponent)
+                #if lol.get(-1).isSegment() :
+                    #print(str(lol.get(-1).toSegment()) + "\n")
     
     # insert 0 where values is missing
     for i in range (0, lastTimeData) :
@@ -136,7 +144,7 @@ def chunksStatistics(filepath, start, stop, session):
     bytesReceived = []
     for segmentNo, segmentInfo in segmentsDic.items() :
         
-        # Populatate received segmetns time list
+        # Populatate received segments time list
         if 'chunksLog:data_received' in segmentInfo and 'chunksLog:interest_sent' in segmentInfo :
             tot = segmentInfo['chunksLog:data_received'] - segmentInfo['chunksLog:interest_sent']
             retriveTimes.append(tot)
@@ -186,36 +194,182 @@ def chunksStatistics(filepath, start, stop, session):
     wlanSeg = wlanStateBySegmentNo(col, startTimestamp, stopTimestamp)
     wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp)
     
+    history = getSessionHistory(col, start, stop)
+    
     if totTime > 0 :
-        graphs.statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies)
+        graphs.statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history)
     else :
         print("Not enough data, skipping results generation for this session")
+  
+class addressStat(object):
+    def __init__(self, address) :
+        self.address = address
+        self.bytesIn = 0
+        self.packetsIn = 0
+        self.bytesOut = 0
+        self.packetsOut = 0
+        
+    def incrementValues(self, event) :
+        if event.name == 'faceLog:packet_sent' :
+            self.bytesOut += float(event['bytes'])
+            self.packetsOut += 1
+        elif event.name == 'faceLog:packet_received' :
+            self.bytesIn += float(event['bytes'])
+            self.packetsIn += 1
+            
+    def getHtmlTable(self, durationMs) :
+        htmlStat = "<table class='address'>"
+        htmlStat += "<tr><th colspan='3'> Address: " + self.address + "</th></tr>"
+        
+        htmlStat += "<tr><td>In pkts</td><td>In Bytes</td><td>In Speed</td></tr>"
+        htmlStat += "<tr><td>" + str(self.packetsIn) + "</td><td>" + str(self.bytesIn / 1000) + " KB</td><td>{0:.2f} KB/s</td></tr>".format((self.bytesIn / 1000)  / (durationMs / 1e3))
+        
+        htmlStat += "<tr><td>Out pkts</td><td>Out Bytes</td><td>Out Speed</td></tr>"
+        htmlStat += "<tr><td>" + str(self.packetsOut) + "</td><td>" + str(self.bytesOut / 1000) + " KB</td><td>{0:.2f} KB/s</td></tr>".format((self.bytesOut / 1000)  / (durationMs / 1e3))
+           
+        htmlStat += "</table>"
+        
+        return htmlStat
+
+class section(object):
+    #startTimestamp; #ms
+    #endTimestamp; #ms
+    #interfaceName;
+    #status;
+    
+    def __init__(self, startTimestamp, interfaceName, status) :
+        self.startTimestamp = startTimestamp
+        self.stopTimestamp = None
+        self.interfaceName = interfaceName
+        self.status = status
+        self.addressStat = {}
+        self.data = 0
+        self.interest = 0
+        self.timeout = 0 # TODO set 0
+        #self.timeouts = 0
+        
+    def __str__(self) :
+        return str(self.startTimestamp) + " " + str(self.stopTimestamp) + " " + self.interfaceName + " status: " + self.status + " "
+    
+    def durationMs(self) :
+        return (self.stopTimestamp - self.startTimestamp) / 1e6;
+    
+    def incrementValues(self, event) :
+        if event.name == 'chunksLog:interest_timeout' :
+            self.timeout += 1
+        elif event.name == 'chunksLog:data_received' :
+            self.data += 1
+        elif event.name == 'chunksLog:interest_sent' :
+            self.interest += 1
+    
+    def getHtmlTable(self) :
+        htmlStat = "<table>"
+        htmlStat += "<tr><th colspan='3'>" + self.interfaceName + " " + self.status + "</th></tr>"
+        htmlStat += "<tr><td> Duration (s) : </td><td colspan='2'>" + str(self.durationMs() / 1e3) + "</td></tr>"
+        
+        htmlStat += "<tr><td>Data</td><td>Interest</td><td>Timeouts</td></tr>"
+        htmlStat += "<tr><td>" + str(self.data) + " </td><td>" + str(self.interest) + " </td><td>" + str(self.timeout) + " </td></tr>"
+        
+        for key, value in self.addressStat.items() :
+            htmlStat += "<tr style='background-color: #FFFFFF'><td></td><td colspan ='2'>"
+            htmlStat += value.getHtmlTable(self.durationMs())
+            htmlStat += "</td></tr>"
+            
+        htmlStat += "</table>"
+    
+        return htmlStat
+    
+def aggregateState(newState, oldState) :
+    if newState == oldState :
+        return True;
+    elif newState == 'running' : #oldState is not running state
+        return False;
+    elif oldState != 'running' : #newState is not running state
+        return True;
+    else:
+        return False;
+        
+def getSessionHistory(col, start, stop) :
+    if start != -1 and stop != -1 :
+        colEvents = col.events_timestamps(start, stop)
+    else :
+        colEvents = col.events
+    
+    stateChange = []    
+    # Search for network state changes
+    lastState = 'running'
+    for event in colEvents :
+        if event.name == 'mgmtLog:network_state':
+            stateChange.append(section(event.timestamp, event['interface_name'], event['interface_state']))
+    
+    
+    
+    previousSec = None
+    filteredStateChange = []
+    for sec in stateChange :
+        # remove duplicate event and group not running state
+        if previousSec == None :
+            filteredStateChange.append(sec)
+            previousSec = sec
+        if not aggregateState(sec.status, previousSec.status) :
+            filteredStateChange.append(sec)
+            previousSec.stopTimestamp = sec.startTimestamp - 1
+            previousSec = sec
+            
+        previousSec.stopTimestamp = stop
+    
+    # TODO search network change event before startTimestamp
+    if len(filteredStateChange) == 0 :
+        sec = section(start, "Uknown", "Uknown")
+        sec.stopTimestamp = stop
+    else :
+        sec = section(start, "Uknown", "Uknown")
+        sec.stopTimestamp = filteredStateChange[0].stopTimestamp
+        filteredStateChange = [sec] + filteredStateChange
+        
+    for sec in filteredStateChange:
+        for event in col.events_timestamps(sec.startTimestamp, sec.stopTimestamp) :
+            if 'local_endpoint' in event :
+                addrStat = sec.addressStat.setdefault(event['local_endpoint'], addressStat(event['local_endpoint']))
+                addrStat.incrementValues(event)
+            else :
+                sec.incrementValues(event)
+    
+    return filteredStateChange
     
     
     
 def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
+    history = getSessionHistory(col, startTimestamp, stopTimestamp)
     wlanStatus = []
-    lastState = [-2, -1]
-    for event in col.events_timestamps(startTimestamp, stopTimestamp) :
-        if not event.name.startswith('chunksLog:') :
-            if event.name == 'mgmtLog:network_state' and  event['interface_name'] == 'wlan0' :
-                if event['interface_state'] == 'running' :
-                    if (lastState[0] < 0) :
-                        lastState[0] = event.timestamp
-                else :
-                    if (lastState[0] > 0 and lastState[1] ==  -1) :
-                        lastState[1] = event.timestamp
-                        wlanStatus.append(lastState)
-                        lastState = [-1, -1]
-                    elif (lastState[0] == -2 and lastState[1] ==  -1 ) : # First running event lost
-                        lastState[0] = startTimestamp
-                        lastState[1] = event.timestamp
-                        wlanStatus.append(lastState)
-                        lastState = [-1, -1]
-                    
-    if (lastState[0] >=  0 and lastState[1] >=  0) :
-        lastState[1] = event.timestamp
-        wlanStatus.append(lastState)
+    for his in history :
+        if his.status == 'running' :
+            wlanStatus.append([his.startTimestamp, his.stopTimestamp])
+        
+    
+    
+    # wlanStatus = []
+    # lastState = [-2, -1]
+    # for event in col.events_timestamps(startTimestamp, stopTimestamp) :
+    #     if not event.name.startswith('chunksLog:') : ## Not needed
+    #         if event.name == 'mgmtLog:network_state' and  event['interface_name'] in wirelessInterfaces :
+    #             if event['interface_state'] == 'running' :
+    #                 if (lastState[0] < 0) :
+    #                     lastState[0] = event.timestamp
+    #             else :
+    #                 if (lastState[0] > 0 and lastState[1] ==  -1) :
+    #                     lastState[1] = event.timestamp
+    #                     wlanStatus.append(lastState)
+    #                     lastState = [-1, -1]
+    #                 elif (lastState[0] == -2 and lastState[1] ==  -1 ) : # First running event lost
+    #                     lastState[0] = startTimestamp
+    #                     lastState[1] = event.timestamp
+    #                     wlanStatus.append(lastState)
+    #                     lastState = [-1, -1]
+    #                 
+    # if (lastState[0] >=  0 and lastState[1] >=  0) :
+    #     lastState[1] = event.timestamp
+    #     wlanStatus.append(lastState)
     
     return wlanStatus
 
@@ -223,16 +377,20 @@ def wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) :
     wlanStatus = wlanStateByTimestamp(col, startTimestamp, stopTimestamp)
     
     wlanSeg = []
-    lastSeg = [-1, -1]    
+    lastSeg = [-1, -1]
+    lastSegment = -1
     for times in wlanStatus :
         for event in col.events_timestamps(times[0], times[1]) :
             if event.name.startswith('chunksLog:') :
-                if 'segment_number' in  event :
-                    if lastSeg[0] == -1 :
-                        lastSeg[0] = event['segment_number']
-                        lastSeg[1] = event['segment_number']
-                    else :
-                        lastSeg[1] = event['segment_number']
+                if event['segment_number'] > lastSegment:
+                    if 'segment_number' in  event :
+                        if lastSeg[0] == -1 :
+                            lastSeg[0] = event['segment_number']
+                            lastSeg[1] = event['segment_number']
+                        else :
+                            lastSeg[1] = event['segment_number']
+                        
+                        lastSegment = lastSeg[1]
         
         if lastSeg[0] != -1 :
             wlanSeg.append(lastSeg)

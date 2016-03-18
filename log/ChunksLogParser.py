@@ -36,11 +36,11 @@ if __name__ == '__main__':
         print()
         i += 1
         
-    try:
+    try :
         if len(sessions) > 1 :
             sessionNo = int(input('Insert session number (0 to select all): '))
         else :
-            sessionNo = 1;
+            sessionNo = 1
         if sessionNo > len(sessions) :
             print("ERROR: no session with specified number")
         else :

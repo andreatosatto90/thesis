@@ -64,6 +64,16 @@ def tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedSt
     
     return htmlStat
 
+def tableHistory(history) :
+    
+    htmlStat = "<div><table>"
+    for sec in history :
+        htmlStat += sec.getHtmlTable()
+        
+    htmlStat += "</table></div>"
+    
+    return htmlStat
+
 
 def graphTimesSegments(mathTimes, wlanSeg) :
     trace1 = go.Scatter(
@@ -83,7 +93,7 @@ def graphTimesSegments(mathTimes, wlanSeg) :
         'yaxis' : dict(range=[0, (mathTimes.mean() / 1000000) * 2]),
         'width' : '800',
         'height' : '600',
-        'title' : 'Retrieve time (s) for each segment',
+        'title' : 'Retrieve time (ms) for each segment',
         'shapes': []
     }
     
@@ -266,11 +276,12 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     
     return htmlGraph
 
-def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies) :  
+def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history) :  
 
     resultsFile = open('res_' + str(session[0]['startTime']) + '.html','w')
     
-    resultsFile.write("<!DOCTYPE html> <html> <head> <style> table { border-collapse: collapse; width: 100%; } th, td { text-align: left; padding: 8px; } tr:nth-child(even){background-color: #f2f2f2} </style> </head> <body>")
+    resultsFile.write("""<!DOCTYPE html> <html> <head> <style> table { border-collapse: collapse; width: 100%; } th { text-align: center; padding: 8px; background-color: #CECCCC} td { text-align: left; padding: 8px; } tr:nth-child(even){background-color: #f2f2f2} " 
+                      "table.address { border-collapse: collapse; width: 100%; } .address th { text-align: center; padding: 8px; background-color: #CECCCC} .address td { text-align: left; padding: 8px; } .address tr:nth-child(even){background-color: #f2f2f2}</style> </head> <body>""")
     
     # T T   C
     #  C    C
@@ -281,20 +292,26 @@ def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout,
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(tableInput(session))
     resultsFile.write("</div>")
-    resultsFile.write("<div style = 'float: right'>")
+    resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedStrategies))
     resultsFile.write("</div>")
+    resultsFile.write("</div>")
+    
+    
+    resultsFile.write("<div style = 'float: right'>")
+    resultsFile.write(tableHistory(history))
     resultsFile.write("</div>")
     
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(graphTimesSegments(mathTimes, wlanSeg))
     resultsFile.write(graphTimeoutSegments(mathTimeout, wlanSeg))
     resultsFile.write("</div>")
-    resultsFile.write("</div>")
+    
     
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(graphBytesTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTimeData)) 
     resultsFile.write(graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTimeData))
+    resultsFile.write("</div>")
     resultsFile.write("</div>")
     
 
