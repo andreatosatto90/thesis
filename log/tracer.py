@@ -18,7 +18,7 @@ def loadAllTraces(filepath):
         
     return col
 
-def startEventToList(event, exitCode = -1):
+def startEventLogToList(event, exitCode = -1):
     dic = {}
     dic['timestamp'] = event.timestamp
     dic['startTime'] = event.datetime
@@ -27,6 +27,17 @@ def startEventToList(event, exitCode = -1):
     dic['maxRetries'] = event['max_retries']
     dic['mustBeFresh'] = event['must_be_fresh']
     dic['exitCode'] = exitCode
+    return dic
+
+def startEventPutToList(event, exitCode = -1):
+    dic = {}
+    dic['timestamp'] = event.timestamp
+    dic['startTime'] = event.datetime
+    dic['prefix'] = event['prefix']
+    dic['signingInfo'] = event['signing_info']
+    dic['freshness'] = event['freshness']
+    dic['maxSegmentSize'] = event['max_segment_size']
+    dic['numberOfSegments'] = event['number_of_segments']
     return dic
 
 def getSessions(filepath):
@@ -40,9 +51,9 @@ def getSessions(filepath):
         if event.name == 'chunksLog:cat_started' :
             if lastStartEvent != None :
                 sessions.append([lastStartEvent, lastEventTimestamp])
-                lastStartEvent = startEventToList(event)
+                lastStartEvent = startEventLogToList(event)
             else :
-                lastStartEvent = startEventToList(event)
+                lastStartEvent = startEventLogToList(event)
         elif event.name == 'chunksLog:cat_stopped' :
            if lastStartEvent != None :
                 lastStartEvent['exitCode'] = event['exit_code']
@@ -54,6 +65,14 @@ def getSessions(filepath):
         sessions.append([lastStartEvent, col.timestamp_end])
     
     return sessions
+
+def getPutInput(col, startTimestamp):
+    # get events per segment (chunks)
+    for event in col.events_timestamps(col.timestamp_begin, startTimestamp + 1000000) : # add 1 second (TODO)
+        if event.name == 'chunksLog:put_started' :
+            lastStartEvent = startEventPutToList(event)
+    
+    return lastStartEvent
 
 def chunksStatistics(filepath, start, stop, session):
     col = loadAllTraces(filepath)
@@ -84,15 +103,15 @@ def chunksStatistics(filepath, start, stop, session):
             elif event.name == 'chunksLog:data_discovery' :
                 discoverySegment = event['segment_number']
                 discoveryData  =  event.timestamp
-            elif event.name == 'chunksLog:interest_timeout' :
-                if event['segment_number'] not in segmentsDic or 'chunksLog:interest_timeout' not in segmentsDic[event['segment_number']] :
+            elif event.name == 'chunksLog:interest_timeout' or event.name == 'chunksLog:data_sent' :
+                if event['segment_number'] not in segmentsDic or event.name not in segmentsDic[event['segment_number']] :
                     segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, 1)
                 else :
-                    segmentsDic[event['segment_number']]['chunksLog:interest_timeout'] += 1
+                    segmentsDic[event['segment_number']][event.name] += 1
             elif event.name == 'chunksLog:interest_sent' or event.name == 'chunksLog:data_received' or event.name == 'chunksLog:interest_nack':
                 segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, event.timestamp)
                 for field in event.items() :
-                    if field[0] == 'received_bytes' :
+                    if field[0] == 'bytes' :
                         if firstTimeData == -1 :
                             firstTimeData = event.timestamp / 1e9
                         
@@ -142,6 +161,7 @@ def chunksStatistics(filepath, start, stop, session):
     retriveTimes = [] # time to retrieve for each segments (from the interest sent to data received)
     timeoutRetries = [] # number of timeout for each segments
     bytesReceived = []
+    datasSent = [] # number of data sent for each segments
     for segmentNo, segmentInfo in segmentsDic.items() :
         
         # Populatate received segments time list
@@ -160,11 +180,17 @@ def chunksStatistics(filepath, start, stop, session):
         else :
             timeoutRetries.append(0)
             
+        # Populate data sent list    
+        if 'chunksLog:data_sent' in segmentInfo :
+            datasSent.append(segmentInfo['chunksLog:data_sent'])
+        else :
+            datasSent.append(0)
+            
         # Populate byte received
         
         if 'chunksLog:data_received' in segmentInfo :
             if segmentNo in segmentsInfo:
-                bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['received_bytes'])
+                bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['bytes'])
         else :
             bytesReceived.append(0)
             
@@ -172,6 +198,7 @@ def chunksStatistics(filepath, start, stop, session):
     mathTimes = np.array(retriveTimes)   # TODO use directly retrieveTimes
     mathTimeout = np.array(timeoutRetries)   # TODO use directly timeoutReties
     mathBytes = np.array(bytesReceived)   # TODO use directly timeoutReties
+    mathDatasSent = np.array(datasSent)
     
     totTime = (stopTimestamp - startTimestamp)/ 1000000000
     
@@ -195,9 +222,10 @@ def chunksStatistics(filepath, start, stop, session):
     wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp)
     
     history = getSessionHistory(col, start, stop)
+    putStart = getPutInput(col, start)
     
     if totTime > 0 :
-        graphs.statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history)
+        graphs.statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history)
     else :
         print("Not enough data, skipping results generation for this session")
   

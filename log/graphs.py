@@ -9,13 +9,13 @@ import os
 def timestampToDate(timestamp) :
     return  datetime.datetime.fromtimestamp(timestamp / 1e9).strftime('%Y-%m-%d %H:%M:%S')
 
-def tableInput(ses) :
+def tableInput(ses, putStart) :
     errorString = 'Yes'
     if (ses[0]['exitCode'] != 0) :
             errorString = 'No'
     
     stat = []
-    stat.append((' Input parameters ', -1))
+    stat.append(('Catchunks Input parameters ', -1))
     stat.append(('Started : ', timestampToDate(ses[0]['timestamp'])))
     stat.append(('Finished : ', timestampToDate(ses[1])))
     stat.append(('Completed: ', errorString ))
@@ -24,6 +24,15 @@ def tableInput(ses) :
     stat.append(('Interest lifetime (ms) : ', str(ses[0]['interestLifetime'])))
     stat.append(('Max retries  : ', str(ses[0]['maxRetries'])))
     stat.append(('Must be fresh : ', str(ses[0]['mustBeFresh'])))
+    
+    if putStart is not None :
+        stat.append(('Putchunks Input parameters ', -1))
+        stat.append(('Started : ', timestampToDate(putStart['timestamp'])))
+        stat.append(('Prefix: ', putStart['prefix']))
+        stat.append(('SigningInfo :', putStart['signingInfo']))
+        stat.append(('Freshness : ', putStart['freshness'] ))
+        stat.append(('Max segment size : ', putStart['maxSegmentSize']))
+        stat.append(('Number of segments  : ', putStart['numberOfSegments']))
     
     htmlStat = "<div><table>"
     for value in stat :
@@ -121,11 +130,17 @@ def graphTimesSegments(mathTimes, wlanSeg) :
     
     return htmlGraph
 
-def graphTimeoutSegments(mathTimeout, wlanSeg) :
+def graphTimeoutSegments(mathTimeout, mathDatasSent, wlanSeg) :
     trace1 = go.Bar(
         x = list(range(0, len(mathTimeout) - 1)),
         y = mathTimeout,
         name = 'Number of timeouts'
+    )
+    
+    trace2 = go.Bar(
+        x = list(range(0, len(mathDatasSent) - 1)),
+        y = mathDatasSent,
+        name = 'Number of data sent'
     )
     
     layout = {
@@ -133,7 +148,7 @@ def graphTimeoutSegments(mathTimeout, wlanSeg) :
         #'yaxis' : dict(range=[0, mathTimeout.mean()]),
         'width' : '800',
         'height' : '600',
-        'title' : 'Number of timeout for each segment',
+        'title' : 'Number of timeout / data sent for each segment',
         'shapes': []
     }
     
@@ -152,7 +167,7 @@ def graphTimeoutSegments(mathTimeout, wlanSeg) :
                 'fillcolor': 'rgba(93, 191, 63, 0.3)',
             })
         
-    data = [trace1]
+    data = [trace1, trace2]
     fig = go.Figure(data=data, layout=layout)
     
     htmlGraph = "<div>" #style = 'float: left'
@@ -276,7 +291,7 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     
     return htmlGraph
 
-def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history) :  
+def statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history) :  
 
     resultsFile = open('res_' + str(session[0]['startTime']) + '.html','w')
     
@@ -290,7 +305,7 @@ def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout,
     
     resultsFile.write("<div>")
     resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(tableInput(session))
+    resultsFile.write(tableInput(session, putStart))
     resultsFile.write("</div>")
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedStrategies))
@@ -304,7 +319,7 @@ def statToHtml(session, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout,
     
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(graphTimesSegments(mathTimes, wlanSeg))
-    resultsFile.write(graphTimeoutSegments(mathTimeout, wlanSeg))
+    resultsFile.write(graphTimeoutSegments(mathTimeout, mathDatasSent, wlanSeg))
     resultsFile.write("</div>")
     
     
