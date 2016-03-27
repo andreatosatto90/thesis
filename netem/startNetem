@@ -1,5 +1,5 @@
 NAME="eth0"
-;NAME="#enp2s0"
+;NAME="enp2s0"
 
 tc qdisc del dev $NAME root
 tc qdisc del dev ifb0 root
