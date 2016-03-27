@@ -99,7 +99,7 @@ def graphTimesSegments(mathTimes, wlanSeg) :
     
     layout = {
         'autosize' : 'false',
-        'yaxis' : dict(range=[0, (mathTimes.mean() / 1000000) * 2]),
+        #'yaxis' : dict(range=[0, (mathTimes.mean() / 1000000) * 2]),
         'width' : '800',
         'height' : '600',
         'title' : 'Retrieve time (ms) for each segment',
@@ -149,6 +149,7 @@ def graphTimeoutSegments(mathTimeout, mathDatasSent, wlanSeg) :
         'width' : '800',
         'height' : '600',
         'title' : 'Number of timeout / data sent for each segment',
+        'barmode' : 'overlay',
         'shapes': []
     }
     
@@ -235,7 +236,9 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     i = 0 
     for val in mathBytesT :
         if i > 0 :
-            mathBytesT[i] = mathBytesT[i] / mathBytesTSec [i]    
+            mathBytesT[i] = mathBytesT[i] / mathBytesTSec [i]
+        else :
+            mathBytesT[i] = mathBytesTSecSpeed[i]
         i += 1
     
     layoutT2 = {
@@ -291,9 +294,77 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     
     return htmlGraph
 
-def statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history) :  
+def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, wlanSegT, firstTimeData, title) :
+    times = np.array(list(packetSentSecTimes.keys()))
+    
+    sentL = np.array(list(packetSentSecTimes.values()))
+    recL = np.array(list(packetReceivedSecTimes.values()))
+    
+    
+    
+    packetsSent = go.Scatter(
+        x =  times,
+        y =  sentL ,
+        name = 'Sent packet'
+    )
+    
+    packetsRec = go.Scatter(
+        x =  times,
+        y =  recL ,
+        name = 'Received packet'
+    )
+    
+    mean = go.Scatter(
+        x = times,
+        y = [str(sentL.mean() + recL.mean()) for i in range (0, len(times))],
+        name = 'Mean'
+    )
+    
+    layoutT = {
+        'width' : '800',
+        'height' : '550',
+        'title' : title,
+        'shapes': [],
+        'barmode' : 'stack'
+    }
+    
+    # for seg in wlanSegT :
+    #     if (seg[0] / 1e9) < firstTimeData :
+    #         startX = 0
+    #     else :
+    #         startX = (seg[0] / 1e9) - firstTimeData
+    #         
+    #     if (seg[1] / 1e9) < firstTimeData :
+    #         endX = 0
+    #     else :
+    #         endX = (seg[1] / 1e9) - firstTimeData
+    #         
+    #     if endX != 0 :
+    #         layoutT['shapes'].append(
+    #             {
+    #                 'type': 'rect',
+    #                 'x0': startX,
+    #                 'y0': 0,
+    #                 'x1': endX,
+    #                 'y1': sentL.max() + recL.max(),
+    #                 'line': {
+    #                     'color': 'rgba(128, 0, 128, 0)',
+    #                     'width': 2,
+    #                 },
+    #                 'fillcolor': 'rgba(93, 191, 63, 0.3)',
+    #             })
+    
+    dataTime = [packetsSent, packetsRec, mean]
+    figT = go.Figure(data=dataTime, layout=layoutT)
+    htmlGraph = "<div>"
+    htmlGraph += plot(figT , include_plotlyjs=False, output_type='div')
+    htmlGraph += "</div>"
+    
+    return htmlGraph
 
-    resultsFile = open('res_' + str(session[0]['startTime']) + '.html','w')
+def statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec) :  
+
+    resultsFile = open('results/res_' + str(session[0]['startTime']) + '.html','w')
     
     resultsFile.write("""<!DOCTYPE html> <html> <head> <style> table { border-collapse: collapse; width: 100%; } th { text-align: center; padding: 8px; background-color: #CECCCC} td { text-align: left; padding: 8px; } tr:nth-child(even){background-color: #f2f2f2} " 
                       "table.address { border-collapse: collapse; width: 100%; } .address th { text-align: center; padding: 8px; background-color: #CECCCC} .address td { text-align: left; padding: 8px; } .address tr:nth-child(even){background-color: #f2f2f2}</style> </head> <body>""")
@@ -326,6 +397,8 @@ def statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, ma
     resultsFile.write("<div style = 'float: left'>")
     resultsFile.write(graphBytesTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTimeData)) 
     resultsFile.write(graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTimeData))
+    resultsFile.write(graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, wlanSegT, firstTimeData, "Consumer packets"))
+    resultsFile.write(graphPacketTime(putPacketSent, putPacketRec, wlanSegT, firstTimeData, "Producer packets"))
     resultsFile.write("</div>")
     resultsFile.write("</div>")
     

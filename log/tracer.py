@@ -8,13 +8,25 @@ import os
 
 wirelessInterfaces = ['wlan0', 'wlp4s0']
 
-def loadAllTraces(filepath):
+def loadCatTraces(filepath):
     # a trace collection holds one to many traces
     col = babeltrace.TraceCollection()
     
     for subDir in os.listdir(filepath):
-        if col.add_trace(filepath + subDir + '/64-bit/', 'ctf') is None:
-            raise RuntimeError('Cannot add trace')
+        if not subDir.startswith("prod") :
+            if col.add_trace(filepath + subDir + '/64-bit/', 'ctf') is None:
+                raise RuntimeError('Cannot add cat trace')
+        
+    return col
+
+def loadPutTraces(filepath):
+    # a trace collection holds one to many traces
+    col = babeltrace.TraceCollection()
+    
+    for subDir in os.listdir(filepath):
+        if subDir.startswith("prod") :
+            if col.add_trace(filepath + subDir + '/64-bit/', 'ctf') is None:
+                raise RuntimeError('Cannot add put trace')
         
     return col
 
@@ -41,7 +53,7 @@ def startEventPutToList(event, exitCode = -1):
     return dic
 
 def getSessions(filepath):
-    col = loadAllTraces(filepath)
+    col = loadCatTraces(filepath)
     sessions = []
 
     lastStartEvent = None
@@ -67,7 +79,6 @@ def getSessions(filepath):
     return sessions
 
 def getPutInput(col, startTimestamp):
-    # get events per segment (chunks)
     for event in col.events_timestamps(col.timestamp_begin, startTimestamp + 1000000) : # add 1 second (TODO)
         if event.name == 'chunksLog:put_started' :
             lastStartEvent = startEventPutToList(event)
@@ -75,7 +86,7 @@ def getPutInput(col, startTimestamp):
     return lastStartEvent
 
 def chunksStatistics(filepath, start, stop, session):
-    col = loadAllTraces(filepath)
+    col = loadCatTraces(filepath)
     
     if start != -1 and stop != -1 :
         colEvents = col.events_timestamps(start, stop)
@@ -86,6 +97,10 @@ def chunksStatistics(filepath, start, stop, session):
     segmentsInfo = {}
     bytesReceivedTimes = {}
     bytesReceivedSecTimes = {}
+    packetSentSecTimes = {}
+    curSent = 0;
+    packetReceivedSecTimes = {}
+    curReceived = 0;
     numBytes = 0
     curBytes = 0
     firstTimeData = -1
@@ -103,7 +118,7 @@ def chunksStatistics(filepath, start, stop, session):
             elif event.name == 'chunksLog:data_discovery' :
                 discoverySegment = event['segment_number']
                 discoveryData  =  event.timestamp
-            elif event.name == 'chunksLog:interest_timeout' or event.name == 'chunksLog:data_sent' :
+            elif event.name == 'chunksLog:interest_timeout' or event.name == 'chunksLog:data_sent' : #remove data sent
                 if event['segment_number'] not in segmentsDic or event.name not in segmentsDic[event['segment_number']] :
                     segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, 1)
                 else :
@@ -132,11 +147,45 @@ def chunksStatistics(filepath, start, stop, session):
             if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
                 if event['strategy_name'] not in usedStrategies :
                     usedStrategies.append(event['strategy_name'])
-                segmentComponent = event['interest_name'].split("?")[0]
-                lol = Name(segmentComponent)
+                #segmentComponent = event['interest_name'].split("?")[0]
+                #lol = Name(segmentComponent)
                 #if lol.get(-1).isSegment() :
                     #print(str(lol.get(-1).toSegment()) + "\n")
+                    
+        if event.name == 'faceLog:packet_sent' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+            
+            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetSentSecTimes :
+                curSent = 0
+                packetSentSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curSent)
+            else :
+                curSent += 1
+                packetSentSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curSent
+                
+        elif event.name == 'faceLog:packet_received' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+            
+            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetReceivedSecTimes :
+                curReceived = 0
+                packetReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curReceived)
+            else :
+                curReceived += 1
+                packetReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curReceived
+                    
+        #elif event.name.startswith('strategyLog:') :
+                    
     
+    for event in loadPutTraces(filepath).events_timestamps(start, stop):
+        if event.name == 'chunksLog:data_sent' :
+            if event['segment_number'] not in segmentsDic or event.name not in segmentsDic[event['segment_number']] :
+                segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, 1)
+            else :
+                segmentsDic[event['segment_number']][event.name] += 1
+
+    
+       
     # insert 0 where values is missing
     for i in range (0, lastTimeData) :
         if i not in bytesReceivedSecTimes :
@@ -222,10 +271,21 @@ def chunksStatistics(filepath, start, stop, session):
     wlanSegT = wlanStateByTimestamp(col, startTimestamp, stopTimestamp)
     
     history = getSessionHistory(col, start, stop)
-    putStart = getPutInput(col, start)
+    
+    colPut = loadPutTraces(filepath)
+    putStart = getPutInput(colPut, start)
+    (putPacketSent, putPacketRec) = getPutPackets(colPut, start, stop)
+    
+    while i < max(len(packetReceivedSecTimes), len(packetReceivedSecTimes)) :
+        if i not in packetSentSecTimes.keys() :
+            packetSentSecTimes.setdefault(i, 0);
+        if i not in packetReceivedSecTimes.keys() :
+            packetReceivedSecTimes.setdefault(i, 0);
+        
+        i += 1
     
     if totTime > 0 :
-        graphs.statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history)
+        graphs.statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec)
     else :
         print("Not enough data, skipping results generation for this session")
   
@@ -425,3 +485,45 @@ def wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) :
             lastSeg = [-1, -1]
                     
     return wlanSeg
+
+def getPutPackets(col, start, stop) :
+    
+    firstTimeData = -1
+    packetSentSecTimes = {}
+    curSent = 0;
+    packetReceivedSecTimes = {}
+    curReceived = 0;
+    
+    for event in col.events_timestamps(start, stop):
+        if event.name == 'faceLog:packet_sent' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+            
+            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetSentSecTimes :
+                curSent = 0
+                packetSentSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curSent)
+            else :
+                curSent += 1
+                packetSentSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curSent
+                
+        elif event.name == 'faceLog:packet_received' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+            
+            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetReceivedSecTimes :
+                curReceived = 0
+                packetReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curReceived)
+            else :
+                curReceived += 1
+                packetReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curReceived
+    
+    i = 0         
+    while i < max(len(packetReceivedSecTimes), len(packetReceivedSecTimes)) :
+        if i not in packetSentSecTimes.keys() :
+            packetSentSecTimes.setdefault(i, 0);
+        if i not in packetReceivedSecTimes.keys() :
+            packetReceivedSecTimes.setdefault(i, 0);
+        
+        i += 1
+                
+    return (packetSentSecTimes, packetReceivedSecTimes)
