@@ -1,0 +1,15 @@
+#NAME="eth0"
+NAME="enp2s0"
+
+COMM="delay 400ms 250ms loss 25%"
+
+tc qdisc del dev $NAME root
+tc qdisc del dev ifb0 root
+
+
+sleep 1
+echo $COMM
+
+tc qdisc add dev $NAME root netem $COMM
+tc qdisc add dev ifb0 root netem $COMM
+
