@@ -1,5 +1,6 @@
-NAME="eth0"
-;NAME="enp2s0"
+#NAME="eth0"
+NAME="enp2s0"
+
 modprobe ifb
 ip link set dev ifb0 up
 tc qdisc add dev $NAME ingress

@@ -1,5 +1,5 @@
-NAME="eth0"
-;NAME="enp2s0"
+#NAME="eth0"
+NAME="enp2s0"
 
 sudo modprobe -r ifb
 tc qdisc del dev $NAME ingress

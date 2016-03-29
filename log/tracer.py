@@ -239,7 +239,12 @@ def chunksStatistics(filepath, start, stop, session):
         
         if 'chunksLog:data_received' in segmentInfo :
             if segmentNo in segmentsInfo:
-                bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['bytes'])
+                if 'chunksLog:data_received' in segmentsInfo[segmentNo] :
+                    bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['bytes'])
+                else :
+                    bytesReceived.append(0)
+            else :
+                bytesReceived.append(0)   
         else :
             bytesReceived.append(0)
             
@@ -276,6 +281,7 @@ def chunksStatistics(filepath, start, stop, session):
     putStart = getPutInput(colPut, start)
     (putPacketSent, putPacketRec) = getPutPackets(colPut, start, stop)
     
+    i = 0
     while i < max(len(packetReceivedSecTimes), len(packetReceivedSecTimes)) :
         if i not in packetSentSecTimes.keys() :
             packetSentSecTimes.setdefault(i, 0);
