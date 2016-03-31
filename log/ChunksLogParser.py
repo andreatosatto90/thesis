@@ -10,6 +10,8 @@ import tracer
 
 import os
 
+noProd = True
+
 def timestampToDate(timestamp) :
     return  datetime.datetime.fromtimestamp(timestamp / 1e9).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -53,10 +55,10 @@ if __name__ == '__main__':
                 if (sessionNo == 0) :
                     for i in range (0, len(sessions)) :
                         print ("Running with session " + str(i + 1) + "...")
-                        tracer.chunksStatistics(sys.argv[1], sessions[i][0]['timestamp'], sessions[i][1], sessions[i])
+                        tracer.chunksStatistics(sys.argv[1], sessions[i][0]['timestamp'], sessions[i][1], sessions[i], noProd)
                     contVal = False
                 else :
                     print ("Running with session " + str(sessionNo) + "...")
-                    tracer.chunksStatistics(sys.argv[1], sessions[sessionNo - 1][0]['timestamp'], sessions[sessionNo - 1][1], sessions[sessionNo - 1])
+                    tracer.chunksStatistics(sys.argv[1], sessions[sessionNo - 1][0]['timestamp'], sessions[sessionNo - 1][1], sessions[sessionNo - 1], noProd)
         except ValueError :
             print("ERROR: Insert a number")

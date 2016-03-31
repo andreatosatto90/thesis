@@ -1,15 +1,17 @@
-#NAME="eth0"
-NAME="enp2s0"
+NAME="eth0"
+#NAME="enp2s0"
 
-COMM="delay 400ms 250ms loss 25%"
+COMM="delay 20ms 2ms loss 5%"
 
 tc qdisc del dev $NAME root
 tc qdisc del dev ifb0 root
+
+tc qdisc add dev $NAME root handle 1:0 tbf rate 48000kbit buffer 16000 limit 30000
+tc qdisc add dev ifb0 root handle 1:0 tbf rate 48000kbit buffer 16000 limit 30000
 
 
 sleep 1
 echo $COMM
 
-tc qdisc add dev $NAME root netem $COMM
-tc qdisc add dev ifb0 root netem $COMM
-
+tc qdisc add dev $NAME parent 1:0 handle 10: netem $COMM
+tc qdisc add dev ifb0 parent 1:0 handle 10: netem $COMM
