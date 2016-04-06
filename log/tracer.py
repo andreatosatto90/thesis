@@ -6,7 +6,7 @@ from pyndn import Name
 
 import os
 
-wirelessInterfaces = ['wlan0', 'wlp4s0']
+wirelessInterfaces = ['wlan0', 'wlp4s0', 'eth0']
 
 def loadCatTraces(filepath):
     # a trace collection holds one to many traces
@@ -230,15 +230,25 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             if firstTimeData == -1 :
                 firstTimeData = event.timestamp / 1e9
                 firstTimeDataMs = event.timestamp / 1e6
-                
-            rttMin.setdefault(int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100), event['rtt_min'])
+            
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if  slot not in rttMin :
+                rttMin.setdefault(slot, (event['rtt_min'], 1))
+            else :
+                (r, c) = rttMin[slot]
+                rttMin[slot] = (r + event['rtt_min'], c+1)
             
         elif event.name == 'strategyLog:rtt_max' :
             if firstTimeData == -1 :
                 firstTimeData = event.timestamp / 1e9
                 firstTimeDataMs = event.timestamp / 1e6
                 
-            rttMax.setdefault(int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100), event['rtt_max'])
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if  slot not in rttMax :
+                rttMax.setdefault(slot, (event['rtt_max'], 1))
+            else :
+                (r, c) = rttMax[slot]
+                rttMax[slot] = (r + event['rtt_max'], c+1)
         #elif event.name.startswith('strategyLog:') :
                     
     
@@ -357,14 +367,21 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             packetSentSecTimes.setdefault(i, 0);
         if i not in packetReceivedSecTimes.keys() :
             packetReceivedSecTimes.setdefault(i, 0);
+        i += 1
         
+    i = 0
+    while i < max(len(rttTime), len(rttTimeMean)) :
+        if i not in rttTime.keys() :
+            rttTime.setdefault(i, (0,1));
+        if i not in rttTimeMean.keys() :
+            rttTimeMean.setdefault(i, (0,1));
         i += 1
     
     if totTime > 0 :
         graphs.statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, \
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, \
-                          rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax)
+                          rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, firstTimeDataMs)
     else :
         print("Not enough data, skipping results generation for this session")
   
@@ -457,14 +474,30 @@ def aggregateState(newState, oldState) :
         return False;
         
 def getSessionHistory(col, start, stop) :
+    
+    lastName = ""
+    lastState = ""
+    lastTime = 0
+    stateChange = [] 
+    
     if start != -1 and stop != -1 :
         colEvents = col.events_timestamps(start, stop)
     else :
+        for event in col.events_timestamps(col.timestamp_begin, start) :
+            if event.name == 'mgmtLog:network_state':
+                lastName = event['interface_name']
+                lastState = event['interface_state']
+                lastTime = event.timestamp
+                print("FOUND")
+        
+        if lastTime != 0 :
+            stateChange.append(section(lastTime, lastName, lastState))
         colEvents = col.events
     
-    stateChange = []    
+       
     # Search for network state changes
-    lastState = 'running'
+    if lastState == "" :
+        lastState = 'running'
     for event in colEvents :
         if event.name == 'mgmtLog:network_state':
             stateChange.append(section(event.timestamp, event['interface_name'], event['interface_state']))
@@ -509,11 +542,11 @@ def getSessionHistory(col, start, stop) :
 def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
     history = getSessionHistory(col, startTimestamp, stopTimestamp)
     wlanStatus = []
+        
     for his in history :
         if his.status == 'running' :
             wlanStatus.append([his.startTimestamp, his.stopTimestamp])
         
-    
     
     # wlanStatus = []
     # lastState = [-2, -1]

@@ -418,7 +418,7 @@ def graphRtt(rtts, rttsMean) :
     return htmlGraph
 
 
-def graphRttTime(rttTime,rttTimeMean, rttMin, rttMax) :
+def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, wlanSegT, firstTimeDataMs) :
     layoutT2 = {
         'width' : '800',
         'height' : '550',
@@ -466,14 +466,14 @@ def graphRttTime(rttTime,rttTimeMean, rttMin, rttMax) :
     
     gRttMin = go.Scatter(
         x =  [str(float(i / 10)) for (i, r) in rttMin.items()],
-        y =  [str(r) for (i, r) in rttMin.items()] ,
+        y =  [str(r[0] / r[1]) for (i, r) in rttMin.items()] ,
         mode = 'markers',
         name = 'Rtt Min'
     )
     
     gRttMax = go.Scatter(
         x =  [str(float(i / 10)) for (i, r) in rttMax.items()],
-        y =  [str(r) for (i, r) in rttMax.items()] ,
+        y =  [str(r[0] / r[1]) for (i, r) in rttMax.items()] ,
         mode = 'markers',
         name = 'Rtt Max'
     )
@@ -492,7 +492,7 @@ def graphRttTime(rttTime,rttTimeMean, rttMin, rttMax) :
 
 def statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, \
                firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, \
-               rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax) :  
+               rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, firstTimeDataMs) :  
 
     resultsFile = open('results/res_' + str(session[0]['startTime']) + '.html','w')
     
@@ -536,7 +536,7 @@ def statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, ma
     
     resultsFile.write("<div style = 'float: left'>")
     #resultsFile.write(graphRtt(rtts, rttsMean))
-    resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax)) 
+    resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, wlanSegT, firstTimeDataMs)) 
     resultsFile.write("</div>")
     
     
