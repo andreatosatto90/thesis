@@ -475,29 +475,31 @@ def aggregateState(newState, oldState) :
         
 def getSessionHistory(col, start, stop) :
     
-    lastName = ""
-    lastState = ""
+    lastName = "wlp4s0"
+    lastState = "running"
     lastTime = 0
     stateChange = [] 
     
     if start != -1 and stop != -1 :
         colEvents = col.events_timestamps(start, stop)
-    else :
         for event in col.events_timestamps(col.timestamp_begin, start) :
             if event.name == 'mgmtLog:network_state':
                 lastName = event['interface_name']
                 lastState = event['interface_state']
-                lastTime = event.timestamp
-                print("FOUND")
+                lastTime = start
         
         if lastTime != 0 :
             stateChange.append(section(lastTime, lastName, lastState))
+        else :
+            lastTime = start
+            stateChange.append(section(lastTime, lastName, lastState))
+    else :
         colEvents = col.events
     
        
     # Search for network state changes
-    if lastState == "" :
-        lastState = 'running'
+    #if lastState == "" :
+        #lastState = 'running'
     for event in colEvents :
         if event.name == 'mgmtLog:network_state':
             stateChange.append(section(event.timestamp, event['interface_name'], event['interface_state']))
@@ -519,13 +521,16 @@ def getSessionHistory(col, start, stop) :
         previousSec.stopTimestamp = stop
     
     # TODO search network change event before startTimestamp
-    if len(filteredStateChange) == 0 :
-        sec = section(start, "Uknown", "Uknown")
-        sec.stopTimestamp = stop
-    else :
-        sec = section(start, "Uknown", "Uknown")
-        sec.stopTimestamp = filteredStateChange[0].stopTimestamp
-        filteredStateChange = [sec] + filteredStateChange
+    # if len(filteredStateChange) == 0 :
+    #     sec = section(start, "Uknown", "Uknown")
+    #     sec.stopTimestamp = stop
+    # else :
+    #     if lastState == "":
+    #         lastName = "Uknown"
+    #         lastState =  "Uknown"
+    #     sec = section(start, lastName, lastState)
+    #     sec.stopTimestamp = filteredStateChange[0].stopTimestamp
+    #     filteredStateChange = [sec] + filteredStateChange
         
     for sec in filteredStateChange:
         for event in col.events_timestamps(sec.startTimestamp, sec.stopTimestamp) :

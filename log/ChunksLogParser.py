@@ -10,7 +10,7 @@ import tracer
 
 import os
 
-noProd = True
+noProd = False
 
 def timestampToDate(timestamp) :
     return  datetime.datetime.fromtimestamp(timestamp / 1e9).strftime('%Y-%m-%d %H:%M:%S')
@@ -40,25 +40,27 @@ if __name__ == '__main__':
             print( "      Must be fresh    \t: " + str(ses[0]['mustBeFresh']))
             print( "      Exit code        \t: " + str(ses[0]['exitCode']))
             print()
+            ses[0]['id'] = i
             i += 1
+            
     
         
-        try :
-            if len(sessions) > 1 :
-                sessionNo = int(input('Insert session number (0 to select all): '))
-            else :
-                sessionNo = 1
+    #try :
+        if len(sessions) > 1 :
+            sessionNo = int(input('Insert session number (0 to select all): '))
+        else :
+            sessionNo = 1
+            contVal = False
+        if sessionNo > len(sessions) :
+            print("ERROR: no session with specified number")
+        else :
+            if (sessionNo == 0) :
+                for i in range (0, len(sessions)) :
+                    print ("Running with session " + str(i + 1) + "...")
+                    tracer.chunksStatistics(sys.argv[1], sessions[i][0]['timestamp'], sessions[i][1], sessions[i], noProd)
                 contVal = False
-            if sessionNo > len(sessions) :
-                print("ERROR: no session with specified number")
             else :
-                if (sessionNo == 0) :
-                    for i in range (0, len(sessions)) :
-                        print ("Running with session " + str(i + 1) + "...")
-                        tracer.chunksStatistics(sys.argv[1], sessions[i][0]['timestamp'], sessions[i][1], sessions[i], noProd)
-                    contVal = False
-                else :
-                    print ("Running with session " + str(sessionNo) + "...")
-                    tracer.chunksStatistics(sys.argv[1], sessions[sessionNo - 1][0]['timestamp'], sessions[sessionNo - 1][1], sessions[sessionNo - 1], noProd)
-        except ValueError :
-            print("ERROR: Insert a number")
+                print ("Running with session " + str(sessionNo) + "...")
+                tracer.chunksStatistics(sys.argv[1], sessions[sessionNo - 1][0]['timestamp'], sessions[sessionNo - 1][1], sessions[sessionNo - 1], noProd)
+    #except ValueError :
+        #print("ERROR: Insert a number " )
