@@ -3,28 +3,34 @@ NAME="eth0"
 #NAME="enp2s0"
 
 main() {
+
+    COMM="rate 30Mbit delay 10ms 0ms loss 1%"
+    #SPEED="48000kbit buffer 15000 limit 15000"
+    #COMM="delay 15ms 0ms loss 0.01%"
+
+    #setRateDelaySleep "$SPEED" "$COMM" 10
+
+    resetNetem
+
+    setRate "$COMM" 
+
+
     SPEED="1000kbit buffer 50000 limit 10000"
-    COMM="delay 40ms 4ms loss 7%"
-
-    setRateDelaySleep "$SPEED" "$COMM" 3
-
-
-    SPEED="500kbit buffer 50000 limit 10000"
     COMM="delay 50ms 4ms loss 10%"
 
-    setRateDelaySleep "$SPEED" "$COMM" 3
+    #setRateDelaySleep "$SPEED" "$COMM" 3
 
 
-    setInterfaceDown 25
+    #setInterfaceDown 3
 
 
     SPEED="1000kbit buffer 50000 limit 10000"
     COMM="delay 30ms 2ms loss 1%"
 
-    setRateDelaySleep "$SPEED" "$COMM" 6
+    #setRateDelaySleep "$SPEED" "$COMM" 6
 
 
-    resetNetem
+    #resetNetem
 }
 
 #################################
@@ -37,8 +43,11 @@ function resetNetem {
 }
 
 function setRate { # $1 rate command
-    tc qdisc add dev $NAME root handle 1:0 tbf rate $1
-    tc qdisc add dev ifb0 root handle 1:0 tbf rate $1 
+    tc qdisc add dev $NAME root handle 1:0 netem $1
+    tc qdisc add dev ifb0 root handle 1:0 netem $1
+
+    #tc qdisc add dev $NAME root handle 1:0 tbf rate $1
+    #tc qdisc add dev ifb0 root handle 1:0 tbf rate $1 
 
     echo $1
 }

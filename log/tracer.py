@@ -79,9 +79,17 @@ def getSessions(filepath):
     return sessions
 
 def getPutInput(col, startTimestamp):
-    for event in col.events_timestamps(col.timestamp_begin, startTimestamp + 1000000) : # add 1 second (TODO)
-        if event.name == 'chunksLog:put_started' :
-            lastStartEvent = startEventPutToList(event)
+    lastStartEvent = None
+    
+    if startTimestamp < col.timestamp_begin :
+        for event in col.events_timestamps(col.timestamp_begin, col.timestamp_end) :
+            if event.name == 'chunksLog:put_started' :
+                lastStartEvent = startEventPutToList(event)
+                break
+    else:
+        for event in col.events_timestamps(col.timestamp_begin, startTimestamp + 100000000) : # add 100 second (TODO)
+            if event.name == 'chunksLog:put_started' :
+                lastStartEvent = startEventPutToList(event)
     
     return lastStartEvent
 
@@ -101,6 +109,8 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     curSent = 0;
     packetReceivedSecTimes = {}
     curReceived = 0;
+    packetReceivedErrorSecTimes = {}
+    curReceivedError = 0;
     numBytes = 0
     curBytes = 0
     firstTimeData = -1 #seconds
@@ -124,6 +134,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     
     rttMin = {}
     rttMax = {}
+    rttMinCalc ={}
     
     for event in colEvents:
         if event.name.startswith('chunksLog:') :
@@ -145,18 +156,19 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                             firstTimeData = event.timestamp / 1e9
                             firstTimeDataMs = event.timestamp / 1e6
                         
-                        if int((event.timestamp / 1e9 ) -  firstTimeData) not in bytesReceivedSecTimes :
-                            curBytes = float(field[1])/1000
-                            bytesReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curBytes)
+                        slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                        if slot not in bytesReceivedSecTimes :
+                            curBytes = float(field[1])/100
+                            bytesReceivedSecTimes.setdefault(slot, curBytes)
                         else :
-                            curBytes += float(field[1])/1000
-                            bytesReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curBytes  
+                            curBytes += float(field[1])/100
+                            bytesReceivedSecTimes[slot] = curBytes
                         
-                        numBytes += float(field[1])/1000
-                        bytesReceivedTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), numBytes) #TODO
+                        numBytes += float(field[1])/100
+                        bytesReceivedTimes.setdefault(slot, numBytes) #TODO
                         
-                        if lastTimeData < int((event.timestamp / 1e9 ) -  firstTimeData) :
-                            lastTimeData = int((event.timestamp / 1e9 ) -  firstTimeData)
+                        if lastTimeData < slot :
+                            lastTimeData = slot
                     segmentsInfo.setdefault(event['segment_number'],{}).setdefault(event.name, {}).setdefault(field[0], field[1])
         elif event.name.startswith('strategyLog:') :
             if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
@@ -165,65 +177,84 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                     
                 if event.name == 'strategyLog:data_received' :
                     if 'rtt' in event :
-                        #rtts.setdefault(numRtt, event['rtt'])
-                        if firstTimeData == -1 :
-                            firstTimeData = event.timestamp / 1e9
-                            firstTimeDataMs = event.timestamp / 1e6
-                        
-                        slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
-                        #print(slot)
-                        if  slot not in rttTime :
-                            curRtt = event['rtt']
-                            rttTime.setdefault(slot, (curRtt, 1))
-                        else :
-                            curRtt += event['rtt']
-                            (r, c) = rttTime[slot]
-                            rttTime[slot] = (curRtt, c+1)
+                        if event['rtt'] != -1 :
+                            #rtts.setdefault(numRtt, event['rtt'])
+                            if firstTimeData == -1 :
+                                firstTimeData = event.timestamp / 1e9
+                                firstTimeDataMs = event.timestamp / 1e6
+                            
+                            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                            #print(slot)
+                            if  slot not in rttTime :
+                                curRtt = event['rtt']
+                                rttTime.setdefault(slot, (curRtt, 1))
+                            else :
+                                curRtt += event['rtt']
+                                (r, c) = rttTime[slot]
+                                rttTime[slot] = (curRtt, c+1)
                         
                     if 'mean_rtt' in event :
-                        #rttsMean.setdefault(numRtt, event['mean_rtt'])
-                        if firstTimeData == -1 :
-                            firstTimeData = event.timestamp / 1e9
-                            firstTimeDataMs = event.timestamp / 1e6
-                        
-                        slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
-                        #print(slot)
-                        if  slot not in rttTimeMean :
-                            curRttMean = event['mean_rtt']
-                            rttTimeMean.setdefault(slot, (curRttMean, 1))
-                        else :
-                            curRttMean += event['mean_rtt']
-                            (r, c) = rttTimeMean[slot]
-                            rttTimeMean[slot] = (curRttMean, c+1)
+                        if event['mean_rtt'] != -1 :
+                            #rttsMean.setdefault(numRtt, event['mean_rtt'])
+                            if firstTimeData == -1 :
+                                firstTimeData = event.timestamp / 1e9
+                                firstTimeDataMs = event.timestamp / 1e6
+                            
+                            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                            #print(slot)
+                            if  slot not in rttTimeMean :
+                                curRttMean = event['mean_rtt']
+                                rttTimeMean.setdefault(slot, (curRttMean, 1))
+                            else :
+                                curRttMean += event['mean_rtt']
+                                (r, c) = rttTimeMean[slot]
+                                rttTimeMean[slot] = (curRttMean, c+1)
                     numRtt += 1
-                #segmentComponent = event['interest_name'].split("?")[0]
-                #lol = Name(segmentComponent)
-                #if lol.get(-1).isSegment() :
-                    #print(str(lol.get(-1).toSegment()) + "\n")
+                    
+                    if 'num_retries' in event :
+                        segmentComponent = event['interest_name'].split("?")[0]
+                        lol = Name(segmentComponent)
+                        if lol.get(-1).isSegment() :
+                            segmentsDic.setdefault(lol.get(-1).toSegment(), {}).setdefault('num_retries', event['num_retries'])
                     
         if event.name == 'faceLog:packet_sent' :
             if firstTimeData == -1 :
                 firstTimeData = event.timestamp / 1e9
                 firstTimeDataMs = event.timestamp / 1e6
             
-            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetSentSecTimes :
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in packetSentSecTimes :
                 curSent = 0
-                packetSentSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curSent)
+                packetSentSecTimes.setdefault(slot, curSent)
             else :
                 curSent += 1
-                packetSentSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curSent
+                packetSentSecTimes[slot] = curSent
                 
         elif event.name == 'faceLog:packet_received' :
             if firstTimeData == -1 :
                 firstTimeData = event.timestamp / 1e9
                 firstTimeDataMs = event.timestamp / 1e6
             
-            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetReceivedSecTimes :
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in packetReceivedSecTimes :
                 curReceived = 0
-                packetReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curReceived)
+                packetReceivedSecTimes.setdefault(slot, curReceived)
             else :
                 curReceived += 1
-                packetReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curReceived
+                packetReceivedSecTimes[slot] = curReceived
+                
+        elif event.name == 'faceLog:packet_received_error' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+                firstTimeDataMs = event.timestamp / 1e6
+            
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in packetReceivedErrorSecTimes :
+                curReceivedError = 0
+                packetReceivedErrorSecTimes.setdefault(slot, curReceivedError)
+            else :
+                curReceivedError += 1
+                packetReceivedErrorSecTimes[slot] = curReceivedError
                 
         
         elif event.name == 'strategyLog:rtt_min' :
@@ -249,9 +280,22 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             else :
                 (r, c) = rttMax[slot]
                 rttMax[slot] = (r + event['rtt_max'], c+1)
+                
+        elif event.name == 'strategyLog:rtt_min_calc' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+                firstTimeDataMs = event.timestamp / 1e6
+                
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if  slot not in rttMinCalc :
+                rttMinCalc.setdefault(slot, (event['rtt_min_calc'], 1))
+            else :
+                (r, c) = rttMinCalc[slot]
+                rttMinCalc[slot] = (r + event['rtt_min_calc'], c+1)
         #elif event.name.startswith('strategyLog:') :
                     
     
+    print("End first part")
     for event in loadPutTraces(filepath).events_timestamps(start, stop):
         if event.name == 'chunksLog:data_sent' :
             if event['segment_number'] not in segmentsDic or event.name not in segmentsDic[event['segment_number']] :
@@ -284,6 +328,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     
     retriveTimes = [] # time to retrieve for each segments (from the interest sent to data received)
     timeoutRetries = [] # number of timeout for each segments
+    stratRetries = [] # number of strategy retries for each segment
     bytesReceived = []
     datasSent = [] # number of data sent for each segments
     for segmentNo, segmentInfo in segmentsDic.items() :
@@ -310,6 +355,11 @@ def chunksStatistics(filepath, start, stop, session, noProd):
         else :
             datasSent.append(0)
             
+        if 'num_retries' in segmentInfo :
+            stratRetries.append(segmentInfo['num_retries'])
+        else :
+            stratRetries.append(0)
+            
         # Populate byte received
         
         if 'chunksLog:data_received' in segmentInfo :
@@ -328,6 +378,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     mathTimeout = np.array(timeoutRetries)   # TODO use directly timeoutReties
     mathBytes = np.array(bytesReceived)   # TODO use directly timeoutReties
     mathDatasSent = np.array(datasSent)
+    mathStratRetries = np.array(stratRetries)
     
     totTime = (stopTimestamp - startTimestamp)/ 1000000000
     
@@ -352,14 +403,16 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     
     history = getSessionHistory(col, start, stop)
     
+    putStart = None
+    putPacketSent = {}
+    putPacketRec = {}
+    
     if not noProd :
         colPut = loadPutTraces(filepath)
         putStart = getPutInput(colPut, start)
-        (putPacketSent, putPacketRec) = getPutPackets(colPut, start, stop)
-    else :
-        putStart = None
-        putPacketSent = {}
-        putPacketRec = {}
+        if putStart != None :
+            (putPacketSent, putPacketRec) = getPutPackets(colPut, start , stop)
+        
     
     i = 0
     while i < max(len(packetReceivedSecTimes), len(packetSentSecTimes)) :
@@ -370,18 +423,20 @@ def chunksStatistics(filepath, start, stop, session, noProd):
         i += 1
         
     i = 0
-    while i < max(len(rttTime), len(rttTimeMean)) :
-        if i not in rttTime.keys() :
-            rttTime.setdefault(i, (0,1));
-        if i not in rttTimeMean.keys() :
-            rttTimeMean.setdefault(i, (0,1));
-        i += 1
+    # while i < max(len(rttTime), len(rttTimeMean)) :
+    #     if i not in rttTime.keys() :
+    #         rttTime.setdefault(i, (0,1));
+    #     if i not in rttTimeMean.keys() :
+    #         rttTimeMean.setdefault(i, (0,1));
+    #     i += 1
+    
+    #getInterestRetries(col, wlanSegT)
     
     if totTime > 0 :
-        graphs.statToHtml(session, putStart, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, \
+        graphs.statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, \
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
-                          usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, \
-                          rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, firstTimeDataMs)
+                          usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
+                          rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs)
     else :
         print("Not enough data, skipping results generation for this session")
   
@@ -551,31 +606,7 @@ def wlanStateByTimestamp(col, startTimestamp, stopTimestamp) :
     for his in history :
         if his.status == 'running' :
             wlanStatus.append([his.startTimestamp, his.stopTimestamp])
-        
-    
-    # wlanStatus = []
-    # lastState = [-2, -1]
-    # for event in col.events_timestamps(startTimestamp, stopTimestamp) :
-    #     if not event.name.startswith('chunksLog:') : ## Not needed
-    #         if event.name == 'mgmtLog:network_state' and  event['interface_name'] in wirelessInterfaces :
-    #             if event['interface_state'] == 'running' :
-    #                 if (lastState[0] < 0) :
-    #                     lastState[0] = event.timestamp
-    #             else :
-    #                 if (lastState[0] > 0 and lastState[1] ==  -1) :
-    #                     lastState[1] = event.timestamp
-    #                     wlanStatus.append(lastState)
-    #                     lastState = [-1, -1]
-    #                 elif (lastState[0] == -2 and lastState[1] ==  -1 ) : # First running event lost
-    #                     lastState[0] = startTimestamp
-    #                     lastState[1] = event.timestamp
-    #                     wlanStatus.append(lastState)
-    #                     lastState = [-1, -1]
-    #                 
-    # if (lastState[0] >=  0 and lastState[1] >=  0) :
-    #     lastState[1] = event.timestamp
-    #     wlanStatus.append(lastState)
-    
+            
     return wlanStatus
 
 def wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) :
@@ -605,34 +636,39 @@ def wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) :
 
 def getPutPackets(col, start, stop) :
     
-    firstTimeData = -1
+    firstTimeDataMs = -1
     packetSentSecTimes = {}
     curSent = 0;
     packetReceivedSecTimes = {}
     curReceived = 0;
     
+    start = start - 3000000
+    stop = stop + 3000000
+    
     for event in col.events_timestamps(start, stop):
         if event.name == 'faceLog:packet_sent' :
-            if firstTimeData == -1 :
-                firstTimeData = event.timestamp / 1e9
+            if firstTimeDataMs == -1 :
+                firstTimeDataMs = event.timestamp / 1e6
             
-            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetSentSecTimes :
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in packetSentSecTimes :
                 curSent = 0
-                packetSentSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curSent)
+                packetSentSecTimes.setdefault(slot, curSent)
             else :
                 curSent += 1
-                packetSentSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curSent
+                packetSentSecTimes[slot] = curSent
                 
         elif event.name == 'faceLog:packet_received' :
-            if firstTimeData == -1 :
-                firstTimeData = event.timestamp / 1e9
+            if firstTimeDataMs == -1 :
+                firstTimeDataMs = event.timestamp / 1e6
             
-            if int((event.timestamp / 1e9 ) -  firstTimeData) not in packetReceivedSecTimes :
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in packetReceivedSecTimes :
                 curReceived = 0
-                packetReceivedSecTimes.setdefault(int((event.timestamp / 1e9 ) -  firstTimeData), curReceived)
+                packetReceivedSecTimes.setdefault(slot, curReceived)
             else :
                 curReceived += 1
-                packetReceivedSecTimes[int((event.timestamp / 1e9 ) -  firstTimeData)] = curReceived
+                packetReceivedSecTimes[slot] = curReceived
     
     i = 0         
     while i < max(len(packetReceivedSecTimes), len(packetReceivedSecTimes)) :
@@ -644,3 +680,29 @@ def getPutPackets(col, start, stop) :
         i += 1
                 
     return (packetSentSecTimes, packetReceivedSecTimes)
+
+# def getInterestRetries(col, wlanSegT) :
+#     rttMean = {}
+#     pendingInterest = {}
+#     receivedInterest = {}
+#     for seg in wlanSegT :
+#         for event in col.events_timestamps(seg[0], seg[1]) :
+#             if event.name == 'strategyLog:interest_sent' :
+#                 segmentComponent = event['interest_name'].split("?")[0]
+#                 lol = Name(segmentComponent)
+#                 if lol.get(-1).isSegment() :
+#                     pendingInterest.setdefault(lol.get(-1).toSegment(), []).append(event.timestamp)
+#             elif event.name == 'strategyLog:data_received' :
+#                 rttMean.setdefault(event.timestamp, event['mean_rtt'])
+#                 segmentComponent = event['interest_name'].split("?")[0]
+#                 lol = Name(segmentComponent)
+#                 if lol.get(-1).isSegment() :
+#                     receivedInterest.setdefault(lol.get(-1).toSegment(), event.timestamp)
+#     
+#     for pi in  pendingInterest :               
+#         for seg in wlanSegT :
+#             for event in col.events_timestamps(seg[0], seg[1]) :
+#                 if pi < seg[0] :
+                    
+            
+        

@@ -5,6 +5,7 @@ from plotly.offline import plot
 import plotly
 import plotly.graph_objs as go
 import datetime
+import time
 
 import tracer
 
@@ -55,12 +56,21 @@ if __name__ == '__main__':
             print("ERROR: no session with specified number")
         else :
             if (sessionNo == 0) :
+                global_start_time = time.time()
                 for i in range (0, len(sessions)) :
+                    start_time = time.time()
                     print ("Running with session " + str(i + 1) + "...")
                     tracer.chunksStatistics(sys.argv[1], sessions[i][0]['timestamp'], sessions[i][1], sessions[i], noProd)
+                    elapsed_time = time.time() - start_time
+                    print ("Elapsed time: " + str(int(elapsed_time/60)) + ":" + str(int(elapsed_time%60)))
                 contVal = False
+                global_elapsed_time = time.time() - global_start_time
+                print ("Total elapsed time: " + str(int(global_elapsed_time/60)) + ":" + str(int(global_elapsed_time%60)))
             else :
+                start_time = time.time()
                 print ("Running with session " + str(sessionNo) + "...")
                 tracer.chunksStatistics(sys.argv[1], sessions[sessionNo - 1][0]['timestamp'], sessions[sessionNo - 1][1], sessions[sessionNo - 1], noProd)
+                elapsed_time = time.time() - start_time
+                print ("Elapsed time: " + str(int(elapsed_time/60)) + ":" + str(int(elapsed_time%60)))
     #except ValueError :
         #print("ERROR: Insert a number " )
