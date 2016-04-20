@@ -3,10 +3,15 @@ import babeltrace.reader
 import numpy as np
 import graphs
 from pyndn import Name
+import datetime
 
 import os
 
 wirelessInterfaces = ['wlan0', 'wlp4s0', 'eth0']
+packetSize = 1407
+contentPacketSize = 1304
+prodStartSlack = 2000000000# 2 sec
+prodStopSlack = 2000000000
 
 def loadCatTraces(filepath):
     # a trace collection holds one to many traces
@@ -87,7 +92,7 @@ def getPutInput(col, startTimestamp):
                 lastStartEvent = startEventPutToList(event)
                 break
     else:
-        for event in col.events_timestamps(col.timestamp_begin, startTimestamp + 100000000) : # add 100 second (TODO)
+        for event in col.events_timestamps(col.timestamp_begin, startTimestamp + prodStopSlack) :
             if event.name == 'chunksLog:put_started' :
                 lastStartEvent = startEventPutToList(event)
     
@@ -111,6 +116,8 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     curReceived = 0;
     packetReceivedErrorSecTimes = {}
     curReceivedError = 0;
+    packetSentErrorSecTimes = {}
+    curSentError = 0;
     numBytes = 0
     curBytes = 0
     firstTimeData = -1 #seconds
@@ -136,6 +143,11 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     rttMax = {}
     rttMinCalc ={}
     
+    minRttMinCalc = 1000000;
+    
+    countPacket = 0
+    countSegment = 0
+    
     for event in colEvents:
         if event.name.startswith('chunksLog:') :
             if event.name == 'chunksLog:interest_discovery' :
@@ -150,6 +162,9 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                     segmentsDic[event['segment_number']][event.name] += 1
             elif event.name == 'chunksLog:interest_sent' or event.name == 'chunksLog:data_received' or event.name == 'chunksLog:interest_nack':
                 segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, event.timestamp)
+                
+                if event.name == 'chunksLog:data_received' :
+                    countSegment += 1
                 for field in event.items() :
                     if field[0] == 'bytes' :
                         if firstTimeData == -1 :
@@ -158,13 +173,13 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                         
                         slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
                         if slot not in bytesReceivedSecTimes :
-                            curBytes = float(field[1])/100
+                            curBytes = packetSize/100 #float(field[1])/100
                             bytesReceivedSecTimes.setdefault(slot, curBytes)
                         else :
-                            curBytes += float(field[1])/100
+                            curBytes += packetSize/100 #float(field[1])/100
                             bytesReceivedSecTimes[slot] = curBytes
                         
-                        numBytes += float(field[1])/100
+                        numBytes += packetSize/100 #float(field[1])/100
                         bytesReceivedTimes.setdefault(slot, numBytes) #TODO
                         
                         if lastTimeData < slot :
@@ -224,7 +239,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             
             slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
             if slot not in packetSentSecTimes :
-                curSent = 0
+                curSent = 1
                 packetSentSecTimes.setdefault(slot, curSent)
             else :
                 curSent += 1
@@ -234,10 +249,12 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             if firstTimeData == -1 :
                 firstTimeData = event.timestamp / 1e9
                 firstTimeDataMs = event.timestamp / 1e6
+                
+            countPacket += 1
             
             slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
             if slot not in packetReceivedSecTimes :
-                curReceived = 0
+                curReceived = 1
                 packetReceivedSecTimes.setdefault(slot, curReceived)
             else :
                 curReceived += 1
@@ -250,11 +267,24 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             
             slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
             if slot not in packetReceivedErrorSecTimes :
-                curReceivedError = 0
+                curReceivedError = 1
                 packetReceivedErrorSecTimes.setdefault(slot, curReceivedError)
             else :
                 curReceivedError += 1
                 packetReceivedErrorSecTimes[slot] = curReceivedError
+                
+        elif event.name == 'faceLog:packet_sent_error' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+                firstTimeDataMs = event.timestamp / 1e6
+            
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in packetSentErrorSecTimes :
+                curSentError = 1
+                packetSentErrorSecTimes.setdefault(slot, curSentError)
+            else :
+                curSentError += 1
+                packetSentErrorSecTimes[slot] = curSentError
                 
         
         elif event.name == 'strategyLog:rtt_min' :
@@ -285,6 +315,11 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             if firstTimeData == -1 :
                 firstTimeData = event.timestamp / 1e9
                 firstTimeDataMs = event.timestamp / 1e6
+             
+             
+            if event['rtt_min_calc'] < minRttMinCalc :
+                minRttMinCalc = event['rtt_min_calc']
+                
                 
             slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
             if  slot not in rttMinCalc :
@@ -295,13 +330,14 @@ def chunksStatistics(filepath, start, stop, session, noProd):
         #elif event.name.startswith('strategyLog:') :
                     
     
-    print("End first part")
-    for event in loadPutTraces(filepath).events_timestamps(start, stop):
-        if event.name == 'chunksLog:data_sent' :
-            if event['segment_number'] not in segmentsDic or event.name not in segmentsDic[event['segment_number']] :
-                segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, 1)
-            else :
-                segmentsDic[event['segment_number']][event.name] += 1
+    print("End first part, Packets " + str(countPacket) + " segments " + str(countSegment))
+    if not noProd :
+        for event in loadPutTraces(filepath).events_timestamps(start - prodStartSlack, stop + prodStopSlack):
+            if event.name == 'chunksLog:data_sent' :
+                if event['segment_number'] not in segmentsDic or event.name not in segmentsDic[event['segment_number']] :
+                    segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, 1)
+                else :
+                    segmentsDic[event['segment_number']][event.name] += 1
 
     
        
@@ -365,7 +401,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
         if 'chunksLog:data_received' in segmentInfo :
             if segmentNo in segmentsInfo:
                 if 'chunksLog:data_received' in segmentsInfo[segmentNo] :
-                    bytesReceived.append(segmentsInfo[segmentNo]['chunksLog:data_received']['bytes'])
+                    bytesReceived.append(packetSize) #segmentsInfo[segmentNo]['chunksLog:data_received']['bytes']
                 else :
                     bytesReceived.append(0)
             else :
@@ -436,7 +472,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
         graphs.statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, \
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
-                          rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs)
+                          packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs, packetSize)
     else :
         print("Not enough data, skipping results generation for this session")
   
@@ -641,9 +677,9 @@ def getPutPackets(col, start, stop) :
     curSent = 0;
     packetReceivedSecTimes = {}
     curReceived = 0;
-    
-    start = start - 3000000
-    stop = stop + 3000000
+
+    start = start - prodStartSlack # 2 sec
+    stop = stop + prodStopSlack
     
     for event in col.events_timestamps(start, stop):
         if event.name == 'faceLog:packet_sent' :

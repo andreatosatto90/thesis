@@ -85,7 +85,7 @@ def tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedSt
     return htmlStat
 
 
-def tableResults2(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc) :
+def tableResults2(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes) :
     rttMath = []
     rttMath.append(('Estimated', np.array([(r[0] / r[1]) for (i, r) in rttTime.items()])))
     rttMath.append(('Mean', np.array([(r[0] / r[1]) for (i, r) in rttTimeMean.items()])))
@@ -132,7 +132,62 @@ def tableResults2(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc) :
         else :
             s += ("",)
     stat.append(s)
-        
+    
+    rttMath = []
+    rttMath.append(('Consumer sent', np.array(list(packetSentSecTimes.values()))))
+    rttMath.append(('Error', np.array(list(packetSentErrorSecTimes.values()))))
+    rttMath.append(('Consumer received', np.array(list(packetReceivedSecTimes.values()))))
+    rttMath.append(('Error', np.array(list(packetReceivedErrorSecTimes.values()))))
+    rttMath.append(('Producer', np.array( list(putPacketSent.values()))))
+    
+    
+    
+    stat.append(('Packets (100ms sample)', -1))
+    
+    s = ("",)
+    for el in rttMath  :
+        s += (el[0],)
+    stat.append(s)
+    
+    s = ("Min",)
+    for el in rttMath :
+        if len(el[1]) > 0 :
+            s += (el[1].min(),)
+        else :
+            s += ("",)
+    stat.append(s)
+    
+    s = ("Max",)
+    for el in rttMath :
+        if len(el[1]) > 0 :
+            s += (el[1].max(),)
+        else :
+            s += ("",)
+    stat.append(s)
+    
+    s = ("Mean",)
+    for el in rttMath :
+        if len(el[1]) > 0 :
+            s += (el[1].mean(),)
+        else :
+            s += ("",)
+    stat.append(s)
+    
+    s = ("Dev. std.",)
+    for el in rttMath :
+        if len(el[1]) > 0 :
+            s += (el[1].std(),)
+        else :
+            s += ("",)
+    stat.append(s)
+    
+    s = ("Total",)
+    for el in rttMath :
+        if len(el[1]) > 0 :
+            s += (el[1].sum(),)
+        else :
+            s += ("",)
+    stat.append(s)
     
     htmlStat = "<div><table>"
     for value in stat :
@@ -316,7 +371,7 @@ def graphBytesTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTim
     
     return htmlGraph
 
-def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecTimes, putStart, wlanSegT, firstTimeDataMs, stopTimestamp) :
+def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecTimes, putStart, packetSize, wlanSegT, firstTimeDataMs, stopTimestamp) :
     mathBytesTSec = np.array(list(bytesReceivedSecTimes.keys()))
     mathBytesTSecSpeed = np.array(list(bytesReceivedSecTimes.values()))
     mathBytesT = np.array(list(bytesReceivedTimes.values()))
@@ -356,18 +411,18 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecT
     if putStart != None :
         times = np.array(list(packetReceivedSecTimes.keys()))
         recL = np.array(list(packetReceivedSecTimes.values()))
-        mathRecL = np.array(list(packetReceivedSecTimes.values()))
+        mathRecL = []
         
         if len(recL) > 0 :
             sumPackets = recL[0]
-            mathRecL[0] = (float(sumPackets) * putStart['maxSegmentSize'])/100
-            for i in range(1, len(mathRecL)) :
-                sumPackets += mathRecL[i]
-                mathRecL[i] = ((float(sumPackets) * putStart['maxSegmentSize'])/100) / (i + 1)
+            mathRecL.append((float(sumPackets) * packetSize)/100)
+            for i in range(1, len(recL)) :
+                sumPackets += recL[i]
+                mathRecL.append((float(sumPackets * packetSize)/100) / (i + 1))
         
         packetsSent = go.Scatter(
             x =  [str(float(i / 10)) for i in times],
-            y =  [str((float(i) * putStart['maxSegmentSize'])/100) for i in recL] ,
+            y =  [str((float(i) * packetSize)/100) for i in recL] ,
             name = 'Socket speed'
         )
         
@@ -379,7 +434,7 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecT
         
         dataTimeSec = [bytesTimeSec, bytesTime, packetsSent, packetsSentMean]
         
-        maxY = max(maxY, float((max(recL) * putStart['maxSegmentSize'])/100))
+        maxY = max(maxY, float((max(recL) * packetSize)/100))
     else : 
         dataTimeSec = [bytesTimeSec, bytesTime]
         
@@ -417,7 +472,7 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecT
     
     return htmlGraph
 
-def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp) :
+def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp) :
     times = np.array(list(packetSentSecTimes.keys()))
     
     sentL = np.array(list(packetSentSecTimes.values()))
@@ -426,30 +481,38 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
     sentProdL = np.array(list(putPacketSent.values()))
     
     errorL = np.array(list(packetReceivedErrorSecTimes.values()))
+    errorSentL = np.array(list(packetSentErrorSecTimes.values()))
     
     packetsSent = go.Scatter(
         x =  [str(float(i / 10)) for i in times],
         y =  sentL ,
-        name = 'Consumer sent'
+        name = 'C sent'
     )
     
     packetsRec = go.Scatter(
         x =  [str(float(i / 10)) for i in times],
         y =  recL ,
-        name = 'Consumer received'
+        name = 'C received'
     )
     
     packetsProd = go.Scatter(
         x =  [str(float(i / 10)) for i in putPacketSent.keys()],
         y =  sentProdL ,
-        name = 'Producer'
+        name = 'P rec/sent'
     )
     
     packetsError = go.Scatter(
         x =  [str(float(i / 10)) for i in packetReceivedErrorSecTimes.keys()],
         y =  errorL ,
         mode = 'markers',
-        name = 'Consumer error'
+        name = 'C receive error'
+    )
+    
+    packetsErrorSent = go.Scatter(
+        x =  [str(float(i / 10)) for i in packetSentErrorSecTimes.keys()],
+        y =  errorSentL ,
+        mode = 'markers',
+        name = 'C Send error'
     )
     
     # mean = go.Scatter(
@@ -494,7 +557,7 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
                     'fillcolor': 'rgba(93, 191, 63, 0.2)',
                 })
     
-    dataTime = [packetsSent, packetsRec, packetsProd, packetsError] #mean
+    dataTime = [packetsSent, packetsRec, packetsProd, packetsError, packetsErrorSent] #mean
     figT = go.Figure(data=dataTime, layout=layoutT)
     htmlGraph = "<div>"
     htmlGraph += plot(figT, include_plotlyjs=includeLibrary, output_type='div')
@@ -650,7 +713,7 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, fir
 
 def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, \
                firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
-               rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs) :
+               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs, packetSize) :
     
     file_count = len([f for f in os.listdir("results/") if os.path.isfile(os.path.join("results/", f))])
 
@@ -672,21 +735,21 @@ def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes
     resultsFile.write(tableResults(totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, usedStrategies, mathStratRetries))
     resultsFile.write("</div>")
     resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(tableResults2(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc))
+    resultsFile.write(tableResults2(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes))
     resultsFile.write("</div>")
     resultsFile.write("</div>")
     
     resultsFile.write("<div>")
     
     resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp))
+    resultsFile.write(graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp))
     includeLibrary = False
     #resultsFile.write(graphRtt(rtts, rttsMean))
     resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, firstTimeDataMs, stopTimestamp)) 
     resultsFile.write("</div>")
     
     resultsFile.write("<div style = 'float: right'>")
-    resultsFile.write(graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecTimes, putStart ,wlanSegT, firstTimeDataMs, stopTimestamp))
+    resultsFile.write(graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecTimes, putStart, packetSize ,wlanSegT, firstTimeDataMs, stopTimestamp))
     resultsFile.write(graphBytesTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp)) 
     resultsFile.write("</div>")
     

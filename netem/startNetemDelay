@@ -4,7 +4,7 @@ NAME="eth0"
 
 main() {
 
-    COMM="rate 30Mbit delay 10ms 0ms loss 1%"
+    COMM="rate 1Mbit delay 15ms 0ms loss 1%"
     #SPEED="48000kbit buffer 15000 limit 15000"
     #COMM="delay 15ms 0ms loss 0.01%"
 
@@ -13,6 +13,39 @@ main() {
     resetNetem
 
     setRate "$COMM" 
+    sleep 15
+    setInterfaceDown 3
+    
+    resetNetem
+    COMM="rate 1Mbit delay 30ms 0ms loss 1%"
+    setRate "$COMM"
+    sleep 15 
+    setInterfaceDown 3
+
+    resetNetem
+    COMM="rate 1Mbit delay 45ms 0ms loss 1%"
+    setRate "$COMM" 
+    sleep 15
+    setInterfaceDown 3
+
+    resetNetem
+    COMM="rate 1Mbit delay 90ms 0ms loss 1%"
+    setRate "$COMM" 
+    sleep 15
+    setInterfaceDown 3
+
+    resetNetem
+    COMM="rate 1Mbit delay 180ms 0ms loss 1%"
+    setRate "$COMM"
+    sleep 15 
+    setInterfaceDown 3
+
+    resetNetem
+    COMM="rate 1Mbit delay 360ms 0ms loss 1%"
+    setRate "$COMM"
+    sleep 15 
+    setInterfaceDown 3
+    
 
 
     SPEED="1000kbit buffer 50000 limit 10000"
