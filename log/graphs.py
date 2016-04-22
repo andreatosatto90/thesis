@@ -25,6 +25,7 @@ def tableInput(ses, putStart) :
     stat.append(('Finished : ', timestampToDate(ses[1])))
     stat.append(('Completed: ', errorString ))
     stat.append(('Duration (s) :', (ses[1] - ses[0]['timestamp']) / 1000000000))
+    stat.append(('Start Pipeline size : ', str(ses[0]['startPipelineSize'])))
     stat.append(('Max Pipeline size : ', str(ses[0]['maxPipelineSize'])))
     stat.append(('Interest lifetime (ms) : ', str(ses[0]['interestLifetime'])))
     stat.append(('Max retries  : ', str(ses[0]['maxRetries'])))
@@ -549,7 +550,8 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
                     'x0': startX,
                     'y0': 0,
                     'x1': endX,
-                    'y1': max((sentL.max() if sentL.size > 0 else 0 , recL.max() if recL.size > 0 else 0, sentL.mean() + recL.mean() if sentL.size > 0 and recL.size > 0 else 0)),
+                    'y1': max((sentL.max() if sentL.size > 0 else 0 , recL.max() if recL.size > 0 else 0, sentL.mean() + recL.mean() if sentL.size > 0 and recL.size > 0 else 0, \
+                               errorL.max() if errorL.size > 0 else 0, errorSentL.max() if errorSentL.size > 0 else 0)),
                     'line': {
                         'color': 'rgba(128, 0, 128, 0)',
                         'width': 2,
@@ -620,13 +622,13 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
 #     return htmlGraph
 
 
-def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, firstTimeDataMs, stopTimestamp) :
+def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, wlanSegT, firstTimeDataMs, stopTimestamp) :
     rttTimeMath = np.array([(r[0] / r[1]) for (i, r) in rttTime.items()])
     rttTimeMeanMath = np.array([(r[0] / r[1]) for (i, r) in rttTimeMean.items()])
     rttMinMath = np.array([(r[0] / r[1]) for (i, r) in rttMin.items()])
     rttMaxMath = np.array([(r[0] / r[1]) for (i, r) in rttMax.items()])
     rttMinCalcMath = np.array([(r[0] / r[1]) for (i, r) in rttMinCalc.items()])
-    
+    rttChunksMath = np.array([(r[0] / r[1]) for (i, r) in rttChunks.items()])
     
     layoutT2 = {
         'width' : str(graphWidth),
@@ -656,7 +658,7 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, fir
                     'x0': startX,
                     'y0': 0,
                     'x1': endX,
-                    'y1': max((rttTimeMath.max() if rttTimeMath.size > 0 else 0, rttMaxMath.max() if rttMaxMath.size > 0 else 0, rttTimeMeanMath.max() if rttTimeMeanMath.size > 0 else 0, rttMinMath.max() if rttMinMath.size > 0 else 0)),
+                    'y1': max((rttTimeMath.max() if rttTimeMath.size > 0 else 0, rttMaxMath.max() if rttMaxMath.size > 0 else 0, rttTimeMeanMath.max() if rttTimeMeanMath.size > 0 else 0, rttMinMath.max() if rttMinMath.size > 0 else 0, rttChunksMath.max() if rttChunksMath.size > 0 else 0)),
                     'line': {
                         'color': 'rgba(128, 0, 128, 0)',
                         'width': 2,
@@ -699,12 +701,76 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, fir
         name = 'RTT no retries'
     )
     
+    gRttChunks = go.Scatter(
+        x =  [str(float(i / 10)) for (i, r) in rttChunks.items()],
+        y =  rttChunksMath,
+        mode = 'markers',
+        name = 'RTT Chunks'
+    )
+    
+    
+    
     #for (i, r) in rttTime.items() :
     #    print (str(r[0] / r[1]))
     
     
-    dataRtt = [gRtt, gRttMean, gRttMin, gRttMax, gRttMinCalc]
+    dataRtt = [gRtt, gRttMean, gRttMin, gRttMax, gRttMinCalc, gRttChunks]
     figT2 = go.Figure(data=dataRtt, layout=layoutT2)
+    htmlGraph = "<div>"
+    htmlGraph += plot(figT2, include_plotlyjs=includeLibrary, output_type='div')
+    htmlGraph += "</div>"
+    
+    return htmlGraph
+
+def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
+    windowSizeMath = np.array([(r[0] / r[1]) for (i, r) in windowSizeTime.items()])
+    
+    
+    layoutT2 = {
+        'width' : str(graphWidth),
+        'height' : str(graphHeight),
+        'title' : 'Window size (Chunks)',
+        'yaxis' : dict(title='Size'),
+        'xaxis' : dict(title='Time (s)', range=[0, float(((stopTimestamp / 1e6) - firstTimeDataMs) / 1e3)]),
+        'shapes': [],
+        'showlegend' : True
+    }
+    
+    for seg in wlanSegT :
+        if (seg[0] / 1e6) < firstTimeDataMs :
+            startX = 0
+        else :
+            startX = ((seg[0] / 1e6) - firstTimeDataMs) / 1e3
+            
+        if (seg[1] / 1e6) < firstTimeDataMs :
+            endX = 0
+        else :
+            endX = ((seg[1] / 1e6) - firstTimeDataMs) / 1e3
+            
+        if endX != 0 :
+            layoutT2['shapes'].append(
+                {
+                    'type': 'rect',
+                    'x0': startX,
+                    'y0': 0,
+                    'x1': endX,
+                    'y1': windowSizeMath.max() if windowSizeMath.size > 0 else 0,
+                    'line': {
+                        'color': 'rgba(128, 0, 128, 0)',
+                        'width': 2,
+                    },
+                    'fillcolor': 'rgba(93, 191, 63, 0.2)',
+                })
+    
+    gWindowSize = go.Scatter(
+        x =  [str(float(i / 10)) for (i, r) in windowSizeTime.items()],
+        y =  windowSizeMath,
+        name = 'Window Size'
+    )
+    
+    
+    dataWindow = [gWindowSize]
+    figT2 = go.Figure(data=dataWindow, layout=layoutT2)
     htmlGraph = "<div>"
     htmlGraph += plot(figT2, include_plotlyjs=includeLibrary, output_type='div')
     htmlGraph += "</div>"
@@ -713,7 +779,7 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, fir
 
 def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, \
                firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
-               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs, packetSize) :
+               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, windowSizeTime) :
     
     file_count = len([f for f in os.listdir("results/") if os.path.isfile(os.path.join("results/", f))])
 
@@ -745,7 +811,8 @@ def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes
     resultsFile.write(graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp))
     includeLibrary = False
     #resultsFile.write(graphRtt(rtts, rttsMean))
-    resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, wlanSegT, firstTimeDataMs, stopTimestamp)) 
+    resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, wlanSegT, firstTimeDataMs, stopTimestamp))
+    resultsFile.write(graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp))
     resultsFile.write("</div>")
     
     resultsFile.write("<div style = 'float: right'>")

@@ -1,0 +1,114 @@
+#!/bin/bash 
+NAME="eth0"
+#NAME="enp2s0"
+
+TYPE="add"
+
+main() {
+
+    
+    #SPEED="48000kbit buffer 15000 limit 15000"
+    #COMM="delay 15ms 0ms loss 0.01%"
+
+    #setRateDelaySleep "$SPEED" "$COMM" 10
+
+    resetNetem
+
+    COMM="rate 1Mbit delay 60ms 6ms loss 1%"
+    setRate "$COMM" 
+    sleep 5
+
+    TYPE="change"
+    
+    COMM="rate 1Mbit delay 15ms 2ms loss 1%"
+    setRate "$COMM"
+    sleep 5
+
+    COMM="rate 1Mbit delay 100ms 10ms loss 1%"
+    setRate "$COMM" 
+    sleep 10
+
+    COMM="rate 1Mbit delay 80ms 7ms loss 1%"
+    setRate "$COMM" 
+    sleep 5
+
+    COMM="rate 1Mbit delay 15ms 2ms loss 1%"
+    setRate "$COMM"
+    sleep 5 
+
+    COMM="rate 1Mbit delay 30ms 4ms loss 1%"
+    setRate "$COMM"
+    sleep 5 
+
+
+    SPEED="1000kbit buffer 50000 limit 10000"
+    COMM="delay 50ms 4ms loss 10%"
+
+    #setRateDelaySleep "$SPEED" "$COMM" 3
+
+
+    #setInterfaceDown 3
+
+
+    SPEED="1000kbit buffer 50000 limit 10000"
+    COMM="delay 30ms 2ms loss 1%"
+
+    #setRateDelaySleep "$SPEED" "$COMM" 6
+
+
+    #resetNetem
+}
+
+#################################
+
+function resetNetem {
+    tc qdisc del dev $NAME root
+    tc qdisc del dev ifb0 root 
+
+    echo "Reset interface"
+}
+
+function setRate { # $1 rate command
+    tc qdisc $TYPE dev $NAME root handle 1:0 netem $1
+    tc qdisc $TYPE dev ifb0 root handle 1:0 netem $1
+
+    #tc qdisc add dev $NAME root handle 1:0 tbf rate $1
+    #tc qdisc add dev ifb0 root handle 1:0 tbf rate $1 
+
+    echo $1
+}
+
+function setDelay { # $1 delay command
+    tc qdisc add dev $NAME parent 1:0 handle 10: netem $1
+    tc qdisc add dev ifb0 parent 1:0 handle 10: netem $1
+
+    echo $1
+}
+
+function setRateDelaySleep { # $1 rate command  $2 delay command  $3 sleep time
+    resetNetem
+
+    setRate "$1"
+    setDelay "$2"
+
+    sleep $3
+}
+
+function setInterfaceDown { # $1 time down
+
+    ip link set $NAME down
+    ip link set ifb0 down
+
+    echo "Interface down"
+
+    sleep $1
+
+    ip link set $NAME up
+    ip link set ifb0 up
+
+    echo "Interface up"
+
+}
+
+main "$@"
+

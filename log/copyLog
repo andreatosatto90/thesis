@@ -3,10 +3,17 @@
 # $1 remote producer
 # $2 local consumer
 
-scp -r npa@132.227.62.164:/home/npa/lttng-traces/$1/ust/uid/0 /home/andrea/lttng-traces/$2/ust/uid/prod0
-scp -r npa@132.227.62.164:/home/npa/lttng-traces/$1/ust/uid/1000 /home/andrea/lttng-traces/$2/ust/uid/prod1000
+if [ -n "$1" ] && [ -n "$2" ]
+then
+  scp -r npa@132.227.62.164:/home/npa/lttng-traces/$1/ust/uid/0 /home/andrea/lttng-traces/$2/ust/uid/prod0
+  scp -r npa@132.227.62.164:/home/npa/lttng-traces/$1/ust/uid/1000 /home/andrea/lttng-traces/$2/ust/uid/prod1000
 
-echo "python3 ChunksLogParser.py ~/lttng-traces/$2/ust/uid/"
-python3 ChunksLogParser.py ~/lttng-traces/$2/ust/uid/
+  echo "python3 ChunksLogParser.py ~/lttng-traces/$2/ust/uid/"
+  python3 ChunksLogParser.py ~/lttng-traces/$2/ust/uid/
+else
+  echo "Example: ./copyLog carTest-20160421-175600 carTest-20160421-175613"
+  echo "Arg order: 1: Remote producer - 2: Local consumer"
+fi
+
 
 

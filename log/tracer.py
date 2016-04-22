@@ -39,6 +39,10 @@ def startEventLogToList(event, exitCode = -1):
     dic = {}
     dic['timestamp'] = event.timestamp
     dic['startTime'] = event.datetime
+    if 'start_pipeline_size' in event:
+        dic['startPipelineSize'] = event['start_pipeline_size']
+    else :
+        dic['startPipelineSize'] = -1
     dic['maxPipelineSize'] = event['max_pipeline_size']
     dic['interestLifetime'] = event['interest_lifetime']
     dic['maxRetries'] = event['max_retries']
@@ -118,6 +122,8 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     curReceivedError = 0;
     packetSentErrorSecTimes = {}
     curSentError = 0;
+    windowSizeTime = {}
+    curWindowSize = 0;
     numBytes = 0
     curBytes = 0
     firstTimeData = -1 #seconds
@@ -134,14 +140,14 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     numRtt = 0
     
     rttTime = {}
-    curRtt = 0;
     
     rttTimeMean = {}
-    curRttMean = 0;
     
     rttMin = {}
     rttMax = {}
     rttMinCalc ={}
+    
+    rttChunks = {}
     
     minRttMinCalc = 1000000;
     
@@ -165,6 +171,20 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                 
                 if event.name == 'chunksLog:data_received' :
                     countSegment += 1
+                    if 'rtt' in event :
+                        #rtts.setdefault(numRtt, event['rtt'])
+                        if firstTimeData == -1 :
+                            firstTimeData = event.timestamp / 1e9
+                            firstTimeDataMs = event.timestamp / 1e6
+                        
+                        slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                        #print(slot)
+                        if  slot not in rttChunks :
+                            rttChunks.setdefault(slot, (event['rtt'], 1))
+                        else :
+                            (r, c) = rttChunks[slot]
+                            rttChunks[slot] = (r + event['rtt'], c+1)
+                    
                 for field in event.items() :
                     if field[0] == 'bytes' :
                         if firstTimeData == -1 :
@@ -185,6 +205,19 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                         if lastTimeData < slot :
                             lastTimeData = slot
                     segmentsInfo.setdefault(event['segment_number'],{}).setdefault(event.name, {}).setdefault(field[0], field[1])
+                    
+            elif event.name =='chunksLog:window' :
+                if firstTimeData == -1 :
+                    firstTimeData = event.timestamp / 1e9
+                    firstTimeDataMs = event.timestamp / 1e6
+                    
+                slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                if  slot not in windowSizeTime :
+                    windowSizeTime.setdefault(slot, (event['size'], 1))
+                else :
+                    (r, c) = windowSizeTime[slot]
+                    windowSizeTime[slot] = (r + event['size'], c+1)
+                    
         elif event.name.startswith('strategyLog:') :
             if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
                 if event['strategy_name'] not in usedStrategies :
@@ -201,12 +234,10 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                             slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
                             #print(slot)
                             if  slot not in rttTime :
-                                curRtt = event['rtt']
-                                rttTime.setdefault(slot, (curRtt, 1))
+                                rttTime.setdefault(slot, (event['rtt'], 1))
                             else :
-                                curRtt += event['rtt']
                                 (r, c) = rttTime[slot]
-                                rttTime[slot] = (curRtt, c+1)
+                                rttTime[slot] = (r + event['rtt'], c+1)
                         
                     if 'mean_rtt' in event :
                         if event['mean_rtt'] != -1 :
@@ -218,12 +249,10 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                             slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
                             #print(slot)
                             if  slot not in rttTimeMean :
-                                curRttMean = event['mean_rtt']
-                                rttTimeMean.setdefault(slot, (curRttMean, 1))
+                                rttTimeMean.setdefault(slot, (event['mean_rtt'], 1))
                             else :
-                                curRttMean += event['mean_rtt']
                                 (r, c) = rttTimeMean[slot]
-                                rttTimeMean[slot] = (curRttMean, c+1)
+                                rttTimeMean[slot] = (r + event['mean_rtt'], c+1)
                     numRtt += 1
                     
                     if 'num_retries' in event :
@@ -472,7 +501,8 @@ def chunksStatistics(filepath, start, stop, session, noProd):
         graphs.statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, \
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
-                          packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, firstTimeDataMs, packetSize)
+                          packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, \
+                          windowSizeTime)
     else :
         print("Not enough data, skipping results generation for this session")
   
@@ -654,7 +684,7 @@ def wlanStateBySegmentNo(col, startTimestamp, stopTimestamp) :
     for times in wlanStatus :
         for event in col.events_timestamps(times[0], times[1]) :
             if event.name.startswith('chunksLog:') :
-                if event['segment_number'] > lastSegment:
+                if 'segment_number' in event and event['segment_number'] > lastSegment:
                     if 'segment_number' in  event :
                         if lastSeg[0] == -1 :
                             lastSeg[0] = event['segment_number']
