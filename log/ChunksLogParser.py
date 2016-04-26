@@ -35,11 +35,13 @@ if __name__ == '__main__':
             
             print( str(i) + " : " + timestampToDate(ses[0]['timestamp']) + " - "+ timestampToDate(ses[1])
                   + " : {:.1f}s ".format((ses[1] - ses[0]['timestamp']) / 1000000000) + errorString)
-            print( "      Max Pipeline size\t: " + str(ses[0]['maxPipelineSize']))
-            print( "      Interest lifetime\t: " + str(ses[0]['interestLifetime']))
-            print( "      Max retries      \t: " + str(ses[0]['maxRetries']))
-            print( "      Must be fresh    \t: " + str(ses[0]['mustBeFresh']))
-            print( "      Exit code        \t: " + str(ses[0]['exitCode']))
+            if 'startPipelineSize' in ses[0] :
+                 print( "      Start Pipeline size\t: " + str(ses[0]['startPipelineSize']))
+            print( "      Max Pipeline size \t: " + str(ses[0]['maxPipelineSize']))
+            print( "      Interest lifetime \t: " + str(ses[0]['interestLifetime']))
+            print( "      Max retries       \t: " + str(ses[0]['maxRetries']))
+            print( "      Must be fresh     \t: " + str(ses[0]['mustBeFresh']))
+            print( "      Exit code         \t: " + str(ses[0]['exitCode']))
             print()
             ses[0]['id'] = i
             i += 1

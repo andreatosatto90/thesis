@@ -1,27 +1,46 @@
 #!/bin/bash 
-NAME="eth0"
-#NAME="enp2s0"
+#NAME="eth0"
+NAME="enp2s0"
 
 SERVER="132.227.62.164/32"
+#SERVER="192.168.2.1/32"
+
+RATE1="48Mbit"
+RATE2="12Mbit"
 
 main() {
-    COMM="rate 1Mbit delay 60ms 6ms loss 1%"
-    setRateTime "$COMM" 5
+    COMM="rate $RATE1 delay 40ms 6ms loss 1%"
+    setRateTime "$COMM" 10
     
-    COMM="rate 1Mbit delay 15ms 2ms loss 1%"
-    setRateTime "$COMM" 5
+    COMM="rate $RATE1 delay 10ms 2ms loss 1%"
+    setRateTime "$COMM" 10
 
-    COMM="rate 1Mbit delay 100ms 10ms loss 1%"
-    setRateTime "$COMM" 5
+    COMM="rate $RATE1 delay 40ms 6ms loss 1%"
+    #setRateTime "$COMM" 10
 
-    COMM="rate 1Mbit delay 80ms 7ms loss 1%"
-    setRateTime "$COMM" 5
+    setInterfaceDown 10 
 
-    COMM="rate 1Mbit delay 15ms 2ms loss 1%"
-    setRateTime "$COMM" 5
+    COMM="rate $RATE2 delay 40ms 10ms loss 1%"
+    setRateTime "$COMM" 10
 
-    COMM="rate 1Mbit delay 30ms 4ms loss 1%"
-    setRateTime "$COMM" 5
+    COMM="rate $RATE2 delay 80ms 7ms loss 1%"
+    setRateTime "$COMM" 10
+
+    setInterfaceDown 3
+
+    COMM="rate $RATE1 delay 15ms 2ms loss 1%"
+    setRateTime "$COMM" 10
+
+    COMM="rate $RATE1 delay 20ms 2ms loss 0.1%"
+    setRateTime "$COMM" 10
+
+    setInterfaceDown 2
+
+    COMM="rate $RATE2 delay 40ms 10ms loss 1%"
+    setRateTime "$COMM" 10
+
+    COMM="rate $RATE2 delay 80ms 7ms loss 1%"
+    setRateTime "$COMM" 10
 }
 
 ################################# 
@@ -56,7 +75,7 @@ function addRate {
     then
       tc filter add dev $NAME protocol ip parent 1:0 prio 3 u32 match ip protocol 17 0xff match ip dport 6363 0xffff match ip dst $SERVER flowid 1:3
       tc qdisc add dev ifb0 parent 1:3 handle 30: netem $1
-      tc filter add dev ifb0 protocol ip parent 1:0 prio 3 u32 match ip protocol 17 0xff match ip dport 6373 0xffff match ip src $SERVER flowid 1:3
+      tc filter add dev ifb0 protocol ip parent 1:0 prio 3 u32 match ip protocol 17 0xff match ip sport 6363 0xffff match ip src $SERVER flowid 1:3
     else
       changeRate "$1"
     fi
@@ -71,17 +90,20 @@ function changeRate {
 
 function setInterfaceDown { # $1 time down
 
-    ip link set $NAME down
+    #ip link set $NAME down
+    ifdown $NAME
     ip link set ifb0 down
 
     echo "Interface down"
 
     sleep $1
 
-    ip link set $NAME up
+    echo "Interface up"
+    #ip link set $NAME up
+    ifup $NAME
     ip link set ifb0 up
 
-    echo "Interface up"
+    
 
 }
 
@@ -102,15 +124,17 @@ function unload {
 
 if [ -n "$1" ]
 then
-  if [ $1 = 'u' ] 
-  then
+  if [ $1 = 'u' ]; then
     unload
-  elif [ $1 = 'l' ] 
-  then 
+  elif [ $1 = 'l' ]; then 
     load
-  elif [ $1 = 'r' ] 
-  then
+  elif [ $1 = 'r' ]; then
     resetNetem
+  elif [ $1 = 's' ]; then
+    tc qdisc show dev $NAME
+    tc qdisc show dev ifb0
+  else
+    echo "Not valid"
   fi
   exit  
 fi

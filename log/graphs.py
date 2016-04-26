@@ -473,7 +473,7 @@ def graphSpeedTime(bytesReceivedTimes, bytesReceivedSecTimes, packetReceivedSecT
     
     return htmlGraph
 
-def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp) :
+def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, dataRejected, wlanSegT, firstTimeDataMs, stopTimestamp) :
     times = np.array(list(packetSentSecTimes.keys()))
     
     sentL = np.array(list(packetSentSecTimes.values()))
@@ -483,6 +483,8 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
     
     errorL = np.array(list(packetReceivedErrorSecTimes.values()))
     errorSentL = np.array(list(packetSentErrorSecTimes.values()))
+    
+    rejectedL = np.array(list(dataRejected.values()))
     
     packetsSent = go.Scatter(
         x =  [str(float(i / 10)) for i in times],
@@ -514,6 +516,13 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
         y =  errorSentL ,
         mode = 'markers',
         name = 'C Send error'
+    )
+    
+    rejected = go.Scatter(
+        x =  [str(float(i / 10)) for i in dataRejected.keys()],
+        y =  rejectedL ,
+        mode = 'markers',
+        name = 'C rejected'
     )
     
     # mean = go.Scatter(
@@ -559,7 +568,7 @@ def graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, p
                     'fillcolor': 'rgba(93, 191, 63, 0.2)',
                 })
     
-    dataTime = [packetsSent, packetsRec, packetsProd, packetsError, packetsErrorSent] #mean
+    dataTime = [packetsSent, packetsRec, packetsProd, packetsError, packetsErrorSent, rejected] #mean
     figT = go.Figure(data=dataTime, layout=layoutT)
     htmlGraph = "<div>"
     htmlGraph += plot(figT, include_plotlyjs=includeLibrary, output_type='div')
@@ -725,7 +734,6 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, wl
 def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
     windowSizeMath = np.array([(r[0] / r[1]) for (i, r) in windowSizeTime.items()])
     
-    
     layoutT2 = {
         'width' : str(graphWidth),
         'height' : str(graphHeight),
@@ -763,7 +771,7 @@ def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
                 })
     
     gWindowSize = go.Scatter(
-        x =  [str(float(i / 10)) for (i, r) in windowSizeTime.items()],
+        x =  [str(float(i / 10)) for i in sorted(windowSizeTime.keys())],
         y =  windowSizeMath,
         name = 'Window Size'
     )
@@ -779,7 +787,7 @@ def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
 
 def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, \
                firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
-               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, windowSizeTime) :
+               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, windowSizeTime, dataRejected) :
     
     file_count = len([f for f in os.listdir("results/") if os.path.isfile(os.path.join("results/", f))])
 
@@ -808,7 +816,7 @@ def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes
     resultsFile.write("<div>")
     
     resultsFile.write("<div style = 'float: left'>")
-    resultsFile.write(graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp))
+    resultsFile.write(graphPacketTime(packetSentSecTimes, packetReceivedSecTimes, putPacketSent, packetReceivedErrorSecTimes, packetSentErrorSecTimes, dataRejected, wlanSegT, firstTimeDataMs, stopTimestamp))
     includeLibrary = False
     #resultsFile.write(graphRtt(rtts, rttsMean))
     resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, wlanSegT, firstTimeDataMs, stopTimestamp))

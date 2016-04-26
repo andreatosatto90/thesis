@@ -147,6 +147,8 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     rttMax = {}
     rttMinCalc ={}
     
+    dataRejected = {}
+    
     rttChunks = {}
     
     minRttMinCalc = 1000000;
@@ -356,6 +358,17 @@ def chunksStatistics(filepath, start, stop, session, noProd):
             else :
                 (r, c) = rttMinCalc[slot]
                 rttMinCalc[slot] = (r + event['rtt_min_calc'], c+1)
+                
+        elif event.name == 'strategyLog:data_rejected' :
+            if firstTimeData == -1 :
+                firstTimeData = event.timestamp / 1e9
+                firstTimeDataMs = event.timestamp / 1e6
+            
+            slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+            if slot not in dataRejected :
+                dataRejected.setdefault(slot, 1)
+            else :
+                dataRejected[slot] = dataRejected[slot] + 1
         #elif event.name.startswith('strategyLog:') :
                     
     
@@ -502,7 +515,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
                           packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, \
-                          windowSizeTime)
+                          windowSizeTime, dataRejected)
     else :
         print("Not enough data, skipping results generation for this session")
   
