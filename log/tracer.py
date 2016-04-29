@@ -43,6 +43,10 @@ def startEventLogToList(event, exitCode = -1):
         dic['startPipelineSize'] = event['start_pipeline_size']
     else :
         dic['startPipelineSize'] = -1
+    if 'ssthresh' in event:
+        dic['ssthresh'] = event['ssthresh']
+    else :
+        dic['ssthresh'] = -1 
     dic['maxPipelineSize'] = event['max_pipeline_size']
     dic['interestLifetime'] = event['interest_lifetime']
     dic['maxRetries'] = event['max_retries']

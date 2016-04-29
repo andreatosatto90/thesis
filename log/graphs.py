@@ -27,8 +27,9 @@ def tableInput(ses, putStart) :
     stat.append(('Duration (s) :', (ses[1] - ses[0]['timestamp']) / 1000000000))
     stat.append(('Start Pipeline size : ', str(ses[0]['startPipelineSize'])))
     stat.append(('Max Pipeline size : ', str(ses[0]['maxPipelineSize'])))
+    stat.append(('Slow start threshold : ', str(ses[0]['ssthresh'])))
     stat.append(('Interest lifetime (ms) : ', str(ses[0]['interestLifetime'])))
-    stat.append(('Max retries  : ', str(ses[0]['maxRetries'])))
+    #stat.append(('Max retries  : ', str(ses[0]['maxRetries'])))
     stat.append(('Must be fresh : ', str(ses[0]['mustBeFresh'])))
     
     if putStart is not None :
