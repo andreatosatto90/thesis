@@ -7,7 +7,7 @@ import datetime
 
 import os
 
-wirelessInterfaces = ['wlan0', 'wlp4s0', 'eth0']
+wirelessInterfaces = [ 'wlp4s0', 'eth0']
 packetSize = 1407
 contentPacketSize = 1304
 prodStartSlack = 2000000000# 2 sec
@@ -160,6 +160,8 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     countPacket = 0
     countSegment = 0
     
+    lifetimeTime = {}
+    
     for event in colEvents:
         if event.name.startswith('chunksLog:') :
             if event.name == 'chunksLog:interest_discovery' :
@@ -174,6 +176,20 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                     segmentsDic[event['segment_number']][event.name] += 1
             elif event.name == 'chunksLog:interest_sent' or event.name == 'chunksLog:data_received' or event.name == 'chunksLog:interest_nack':
                 segmentsDic.setdefault(event['segment_number'],{}).setdefault(event.name, event.timestamp)
+                
+                if event.name == 'chunksLog:interest_sent' :
+                    if 'lifetime' in event :
+                        if firstTimeData == -1 :
+                            firstTimeData = event.timestamp / 1e9
+                            firstTimeDataMs = event.timestamp / 1e6
+                        
+                        slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                        #print(slot)
+                        if slot not in lifetimeTime :
+                            lifetimeTime.setdefault(slot, (event['lifetime'], 1))
+                        else :
+                            (r, c) = lifetimeTime[slot]
+                            lifetimeTime[slot] = (r + event['lifetime'], c+1)
                 
                 if event.name == 'chunksLog:data_received' :
                     countSegment += 1
@@ -226,10 +242,11 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                     
         elif event.name.startswith('strategyLog:') :
             if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
-                if event['strategy_name'] not in usedStrategies :
-                    usedStrategies.append(event['strategy_name'])
                     
                 if event.name == 'strategyLog:data_received' :
+                    if event['strategy_name'] not in usedStrategies :
+                        usedStrategies.append(event['strategy_name'])
+                    
                     if 'rtt' in event :
                         if event['rtt'] != -1 :
                             #rtts.setdefault(numRtt, event['rtt'])
@@ -519,7 +536,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
                           packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, \
-                          windowSizeTime, dataRejected)
+                          windowSizeTime, dataRejected, lifetimeTime)
     else :
         print("Not enough data, skipping results generation for this session")
   

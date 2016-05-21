@@ -1,40 +1,40 @@
-Wo  #!/bin/bash 
+#!/bin/bash 
 NAME="eth0"
 #NAME="enp2s0"
 #NAME="wlan0"
 
-SERVER="132.227.62.164/32"
-#SERVER="192.168.2.1/32"
+#SERVER="132.227.62.164/32"
+SERVER="192.168.1.192/32"
 
-RATE1="12Mbit"
-RATE2="1Mbit"
+RATE1="1Mbit"
+RATE2="24Mbit"
 
 main() {
-    COMM="rate $RATE1 delay 40ms 2ms loss 20%"
-    setRateTime "$COMM" 4
-    
-    COMM="rate $RATE1 delay 40ms 2ms loss 20%"
-    setRateTime "$COMM" 4
-
-    COMM="rate $RATE1 delay 40ms 2ms loss 20%"
-    setRateTime "$COMM" 4
-    
-    COMM="rate $RATE1 delay 40ms 2ms loss 20%"
-    setRateTime "$COMM" 4
-
-    setInterfaceDown 5 
-
     COMM="rate $RATE1 delay 30ms 2ms loss 10%"
-    setRateTime "$COMM" 4
+    setRateTime "$COMM" 6
     
-    COMM="rate $RATE1 delay 20ms 2ms loss 10%"
-    setRateTime "$COMM" 4
+    COMM="rate $RATE1 delay 80ms 2ms loss 30%"
+    setRateTime "$COMM" 6
 
-    COMM="rate $RATE1 delay 30ms 2ms loss 10%"
-    setRateTime "$COMM" 4
+    COMM="rate $RATE1 delay 30ms 2ms loss 30%"
+    setRateTime "$COMM" 6
     
-    COMM="rate $RATE1 delay 20ms 2ms loss 10%"
-    setRateTime "$COMM" 4
+    COMM="rate $RATE1 delay 80ms 2ms loss 30%"
+    setRateTime "$COMM" 6
+
+    setInterfaceDown 5
+
+    COMM="rate $RATE2 delay 30ms 2ms loss 20%"
+    setRateTime "$COMM" 6
+    
+    COMM="rate $RATE2 delay 80ms 2ms loss 20%"
+    setRateTime "$COMM" 6
+
+    COMM="rate $RATE2 delay 30ms 2ms loss 20%"
+    setRateTime "$COMM" 6
+    
+    COMM="rate $RATE2 delay 80ms 2ms loss 20%"
+    setRateTime "$COMM" 6
 
     
     
@@ -121,8 +121,8 @@ function changeRate {
 
 function setInterfaceDown { # $1 time down
 
-    #ip link set $NAME down
-    ifdown $NAME
+    ip link set $NAME down
+    #ifdown $NAME
     ip link set ifb0 down
 
     echo "Interface down"
@@ -130,8 +130,8 @@ function setInterfaceDown { # $1 time down
     sleep $1
 
     echo "Interface up"
-    #ip link set $NAME up
-    ifup $NAME
+    ip link set $NAME up
+    #ifup $NAME
     ip link set ifb0 up
 
     
@@ -165,7 +165,12 @@ then
     tc qdisc show dev $NAME
     tc qdisc show dev ifb0
   elif [ $1 = 'd' ]; then
-    setInterfaceDown 5
+    if [ -n "$2" ]
+    then
+        setInterfaceDown $2
+    else
+        setInterfaceDown 5
+    fi
   else
     echo "Not valid"
   fi

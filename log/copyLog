@@ -3,10 +3,15 @@
 # $1 remote producer
 # $2 local consumer
 
+#USER="npa"
+#REMOTE="132.227.62.164"
+USER="andrea"
+REMOTE="192.168.1.192"
+
 if [ -n "$1" ] && [ -n "$2" ]
 then
-  scp -r npa@132.227.62.164:/home/npa/lttng-traces/$1/ust/uid/0 /home/andrea/lttng-traces/$2/ust/uid/prod0
-  scp -r npa@132.227.62.164:/home/npa/lttng-traces/$1/ust/uid/1000 /home/andrea/lttng-traces/$2/ust/uid/prod1000
+  scp -r $USER@$REMOTE:/home/$USER/lttng-traces/$1/ust/uid/0 /home/andrea/lttng-traces/$2/ust/uid/prod0
+  scp -r $USER@$REMOTE:/home/$USER/lttng-traces/$1/ust/uid/1000 /home/andrea/lttng-traces/$2/ust/uid/prod1000
 
   echo "python3 ChunksLogParser.py ~/lttng-traces/$2/ust/uid/"
   python3 ChunksLogParser.py ~/lttng-traces/$2/ust/uid/

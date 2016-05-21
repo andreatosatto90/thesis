@@ -2,7 +2,7 @@
 
 ./nfd &
 
-sleep 4
+sleep 3
 
 # Other strategies:
 #  - only-wlan
