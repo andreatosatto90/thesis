@@ -127,6 +127,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     packetSentErrorSecTimes = {}
     curSentError = 0;
     windowSizeTime = {}
+    windowMultiplier = {}
     curWindowSize = 0;
     numBytes = 0
     curBytes = 0
@@ -239,6 +240,19 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                 else :
                     (r, c) = windowSizeTime[slot]
                     windowSizeTime[slot] = (r + event['size'], c+1)
+                    
+            elif event.name =='chunksLog:window_decrease' :
+                if firstTimeData == -1 :
+                    firstTimeData = event.timestamp / 1e9
+                    firstTimeDataMs = event.timestamp / 1e6
+                    
+                slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                if  slot not in windowMultiplier :
+                    windowMultiplier.setdefault(slot, (event['rtt_multiplier'], 1))
+                else :
+                    (r, c) = windowMultiplier[slot]
+                    windowMultiplier[slot] = (max(int(r), int(event['rtt_multiplier'])), 1)
+                    
                     
         elif event.name.startswith('strategyLog:') :
             if event.name == 'strategyLog:interest_sent' or event.name == 'strategyLog:data_received':
@@ -536,7 +550,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
                           packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, \
-                          windowSizeTime, dataRejected, lifetimeTime)
+                          windowSizeTime, windowMultiplier, dataRejected, lifetimeTime)
     else :
         print("Not enough data, skipping results generation for this session")
   

@@ -2,6 +2,9 @@
 NAME="eth0"
 #NAME="enp2s0"
 #NAME="wlan0"
+NAME2="wlan0" #interface always up
+
+COMM2="delay 70ms 2ms loss 10%" 
 
 #SERVER="132.227.62.164/32"
 SERVER="192.168.1.192/32"
@@ -10,68 +13,54 @@ RATE1="1Mbit"
 RATE2="24Mbit"
 
 main() {
-    COMM="rate $RATE1 delay 30ms 2ms loss 10%"
+    COMM2="delay 50ms 2ms loss 20%" 
+    setRateSecondary "$COMM2"
+    
+    COMM="rate $RATE1 delay 30ms 2ms loss 30%"
     setRateTime "$COMM" 6
     
-    COMM="rate $RATE1 delay 80ms 2ms loss 30%"
+    COMM="rate $RATE1 delay 60ms 2ms loss 30%"
     setRateTime "$COMM" 6
 
     COMM="rate $RATE1 delay 30ms 2ms loss 30%"
     setRateTime "$COMM" 6
     
-    COMM="rate $RATE1 delay 80ms 2ms loss 30%"
+    COMM="rate $RATE1 delay 60ms 2ms loss 30%"
     setRateTime "$COMM" 6
 
-    setInterfaceDown 5
+    setInterfaceDown 10
 
-    COMM="rate $RATE2 delay 30ms 2ms loss 20%"
+    COMM="rate $RATE1 delay 60ms 2ms loss 30%"
     setRateTime "$COMM" 6
     
-    COMM="rate $RATE2 delay 80ms 2ms loss 20%"
+    COMM="rate $RATE1 delay 30ms 2ms loss 30%"
     setRateTime "$COMM" 6
 
-    COMM="rate $RATE2 delay 30ms 2ms loss 20%"
+    COMM="rate $RATE1 delay 60ms 2ms loss 30%"
     setRateTime "$COMM" 6
     
-    COMM="rate $RATE2 delay 80ms 2ms loss 20%"
+    COMM="rate $RATE1 delay 30ms 2ms loss 30%"
+    setRateTime "$COMM" 6
+    
+    COMM2="delay 80ms 2ms loss 20%" 
+    setRateSecondary "$COMM2"
+
+    setInterfaceDown 10
+    
+    COMM="rate $RATE1 delay 20ms 2ms loss 40%"
+    setRateTime "$COMM" 6
+    
+    COMM="rate $RATE1 delay 40ms 2ms loss 40%"
     setRateTime "$COMM" 6
 
+    COMM="rate $RATE1 delay 50ms 2ms loss 40%"
+    setRateTime "$COMM" 6
     
+    COMM="rate $RATE1 delay 60ms 2ms loss 40%"
+    setRateTime "$COMM" 6
     
+    pkill -INT ndncatchunks
     
-    
-    #COMM="rate $RATE1 delay 30ms 4ms loss 0.1%"
-    #setRateTime "$COMM" 10
-    #
-    #COMM="rate $RATE1 delay 10ms 2ms loss 1%"
-    #setRateTime "$COMM" 10
-    #
-    #COMM="rate $RATE1 delay 40ms 6ms loss 1%"
-    #setRateTime "$COMM" 10
-    #
-    #setInterfaceDown 10 
-    #
-    #COMM="rate $RATE2 delay 40ms 10ms loss 1%"
-    #setRateTime "$COMM" 10
-    #
-    #COMM="rate $RATE2 delay 80ms 7ms loss 1%"
-    #setRateTime "$COMM" 10
-    #
-    #setInterfaceDown 3
-    #
-    #COMM="rate $RATE1 delay 15ms 2ms loss 1%"
-    #setRateTime "$COMM" 10
-    #
-    #COMM="rate $RATE1 delay 20ms 2ms loss 0.1%"
-    #setRateTime "$COMM" 10
-    #
-    #setInterfaceDown 2
-    #
-    #COMM="rate $RATE2 delay 40ms 10ms loss 1%"
-    #setRateTime "$COMM" 10
-
-    #COMM="rate $RATE2 delay 80ms 7ms loss 1%"
-    #setRateTime "$COMM" 10
 }
 
 ################################# 
@@ -138,6 +127,16 @@ function setInterfaceDown { # $1 time down
 
 }
 
+function setRateSecondary {
+    tc qdisc add dev $NAME2 root netem $1
+    if [ $? -ne '0' ] 
+    then
+      tc qdisc change dev $NAME2 root netem $1
+    fi
+    
+    echo "Secondary $1"
+}
+
 function load {
   modprobe ifb
   ip link set dev ifb0 up
@@ -151,6 +150,8 @@ function unload {
   sudo modprobe -r ifb
   tc qdisc del dev $NAME ingress
   tc qdisc del dev $NAME root
+  
+  tc qdisc del dev $NAME2 root
 }
 
 if [ -n "$1" ]

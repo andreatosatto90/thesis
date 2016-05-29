@@ -321,11 +321,11 @@ def graphTimeoutSegments(mathTimeout, mathDatasSent, mathStratRetries, wlanSeg) 
 
 def graphBytesTime(bytesReceivedTimes, bytesReceivedSecTimes, wlanSegT, firstTimeDataMs, stopTimestamp) :
     mathBytesT = np.array(list(bytesReceivedTimes.keys()))
-    mathBytesTSpeed = np.array(list(bytesReceivedTimes.values()))
+    mathBytesTSpeed = np.array([float(i / 10) for i in bytesReceivedTimes.values()])
     
     bytesTime = go.Scatter(
         x =  [str(float(i / 10)) for i in mathBytesT],
-        y =  mathBytesTSpeed ,
+        y =  mathBytesTSpeed,
         name = 'Retrieved data'
     )
     
@@ -743,8 +743,9 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, li
     
     return htmlGraph
 
-def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
-    windowSizeMath = np.array([(r[0] / r[1]) for (i, r) in windowSizeTime.items()])
+def graphWindow(windowSizeTime, windowMultiplier, wlanSegT, firstTimeDataMs, stopTimestamp) :
+    windowSizeMath = np.array([(windowSizeTime[i][0] / windowSizeTime[i][1]) for i in sorted(windowSizeTime.keys())])
+    windowMultiplierMath = np.array([(windowMultiplier[i][0] / windowMultiplier[i][1]) for i in sorted(windowMultiplier.keys())])
     
     layoutT2 = {
         'width' : str(graphWidth),
@@ -788,8 +789,14 @@ def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
         name = 'Window Size'
     )
     
+    gWindowMulti = go.Scatter(
+        x =  [str(float(i / 10)) for i in sorted(windowMultiplier.keys())],
+        y =  windowMultiplierMath,
+        mode = 'markers',
+        name = 'RTO Multiplier'
+    )
     
-    dataWindow = [gWindowSize]
+    dataWindow = [gWindowSize, gWindowMulti]
     figT2 = go.Figure(data=dataWindow, layout=layoutT2)
     htmlGraph = "<div>"
     htmlGraph += plot(figT2, include_plotlyjs=includeLibrary, output_type='div')
@@ -799,7 +806,8 @@ def graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp) :
 
 def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, \
                firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
-               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, windowSizeTime, dataRejected , lifetimeTime) :
+               packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, windowSizeTime, windowMultiplier, \
+               dataRejected , lifetimeTime) :
     
     file_count = len([f for f in os.listdir("results/") if os.path.isfile(os.path.join("results/", f))])
 
@@ -832,7 +840,7 @@ def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes
     includeLibrary = False
     #resultsFile.write(graphRtt(rtts, rttsMean))
     resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, lifetimeTime, wlanSegT, firstTimeDataMs, stopTimestamp))
-    resultsFile.write(graphWindow(windowSizeTime, wlanSegT, firstTimeDataMs, stopTimestamp))
+    resultsFile.write(graphWindow(windowSizeTime, windowMultiplier, wlanSegT, firstTimeDataMs, stopTimestamp))
     resultsFile.write("</div>")
     
     resultsFile.write("<div style = 'float: right'>")
