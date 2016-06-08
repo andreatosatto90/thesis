@@ -31,6 +31,9 @@ def tableInput(ses, putStart) :
     stat.append(('Interest lifetime (ms) : ', str(ses[0]['interestLifetime'])))
     #stat.append(('Max retries  : ', str(ses[0]['maxRetries'])))
     stat.append(('Must be fresh : ', str(ses[0]['mustBeFresh'])))
+    stat.append(('Number timeout before reset : ', str(ses[0]['timeout_reset'])))
+    stat.append(('Window cut multiplier : ', str(ses[0]['window_cut_multiplier'])))
+    stat.append(('Rto reset on Data : ', str(ses[0]['rto_reset'])))
     
     if putStart is not None :
         stat.append(('Putchunks Input parameters ', -1))
@@ -743,9 +746,12 @@ def graphRttTime(rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, li
     
     return htmlGraph
 
-def graphWindow(windowSizeTime, windowMultiplier, wlanSegT, firstTimeDataMs, stopTimestamp) :
+def graphWindow(windowSizeTime, windowMultiplier, windowRttReset, wlanSegT, firstTimeDataMs, stopTimestamp) :
     windowSizeMath = np.array([(windowSizeTime[i][0] / windowSizeTime[i][1]) for i in sorted(windowSizeTime.keys())])
     windowMultiplierMath = np.array([(windowMultiplier[i][0] / windowMultiplier[i][1]) for i in sorted(windowMultiplier.keys())])
+    windowRttResetMath = np.array([(windowRttReset[i][0] / windowRttReset[i][1]) for i in sorted(windowRttReset.keys())])
+    
+    
     
     layoutT2 = {
         'width' : str(graphWidth),
@@ -796,7 +802,16 @@ def graphWindow(windowSizeTime, windowMultiplier, wlanSegT, firstTimeDataMs, sto
         name = 'RTO Multiplier'
     )
     
-    dataWindow = [gWindowSize, gWindowMulti]
+    gWindowRttReset = go.Scatter(
+        x =  [str(float(i / 10)) for i in sorted(windowRttReset.keys())],
+        y =  windowRttResetMath,
+        mode = 'markers',
+        name = 'Reset RTT'
+    )
+    
+    
+    
+    dataWindow = [gWindowSize, gWindowMulti, gWindowRttReset]
     figT2 = go.Figure(data=dataWindow, layout=layoutT2)
     htmlGraph = "<div>"
     htmlGraph += plot(figT2, include_plotlyjs=includeLibrary, output_type='div')
@@ -807,7 +822,7 @@ def graphWindow(windowSizeTime, windowMultiplier, wlanSegT, firstTimeDataMs, sto
 def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes, mathTimes, mathTimeout, mathStratRetries, mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, \
                firstTimeData, bytesReceivedSecTimes, usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
                packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, windowSizeTime, windowMultiplier, \
-               dataRejected , lifetimeTime) :
+               dataRejected , lifetimeTime, windowRttReset) :
     
     file_count = len([f for f in os.listdir("results/") if os.path.isfile(os.path.join("results/", f))])
 
@@ -840,7 +855,7 @@ def statToHtml(session, putStart, stopTimestamp, totTime, segmentsDic, mathBytes
     includeLibrary = False
     #resultsFile.write(graphRtt(rtts, rttsMean))
     resultsFile.write(graphRttTime(rttTime,rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, lifetimeTime, wlanSegT, firstTimeDataMs, stopTimestamp))
-    resultsFile.write(graphWindow(windowSizeTime, windowMultiplier, wlanSegT, firstTimeDataMs, stopTimestamp))
+    resultsFile.write(graphWindow(windowSizeTime, windowMultiplier, windowRttReset, wlanSegT, firstTimeDataMs, stopTimestamp))
     resultsFile.write("</div>")
     
     resultsFile.write("<div style = 'float: right'>")

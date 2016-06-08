@@ -51,6 +51,18 @@ def startEventLogToList(event, exitCode = -1):
     dic['interestLifetime'] = event['interest_lifetime']
     dic['maxRetries'] = event['max_retries']
     dic['mustBeFresh'] = event['must_be_fresh']
+    if 'timeout_reset' in event:
+        dic['timeout_reset'] = event['timeout_reset']
+    else :
+        dic['timeout_reset'] = -1
+    if 'window_cut_multiplier' in event:
+        dic['window_cut_multiplier'] = event['window_cut_multiplier']
+    else :
+        dic['window_cut_multiplier'] = -1
+    if 'rto_reset' in event:
+        dic['rto_reset'] = event['rto_reset']
+    else :
+        dic['rto_reset'] = -1
     dic['exitCode'] = exitCode
     return dic
 
@@ -128,6 +140,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
     curSentError = 0;
     windowSizeTime = {}
     windowMultiplier = {}
+    windowRttReset = {}
     curWindowSize = 0;
     numBytes = 0
     curBytes = 0
@@ -241,17 +254,29 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                     (r, c) = windowSizeTime[slot]
                     windowSizeTime[slot] = (r + event['size'], c+1)
                     
-            elif event.name =='chunksLog:window_decrease' :
+            elif event.name =='chunksLog:rtoMulti_change' :
                 if firstTimeData == -1 :
                     firstTimeData = event.timestamp / 1e9
                     firstTimeDataMs = event.timestamp / 1e6
                     
                 slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
                 if  slot not in windowMultiplier :
-                    windowMultiplier.setdefault(slot, (event['rtt_multiplier'], 1))
+                    windowMultiplier.setdefault(slot, (event['size'], 1))
                 else :
                     (r, c) = windowMultiplier[slot]
-                    windowMultiplier[slot] = (max(int(r), int(event['rtt_multiplier'])), 1)
+                    windowMultiplier[slot] = (int(event['size']), 1)
+                    
+            elif event.name =='chunksLog:rtt_reset' :
+                if firstTimeData == -1 :
+                    firstTimeData = event.timestamp / 1e9
+                    firstTimeDataMs = event.timestamp / 1e6
+                    
+                slot = int(((event.timestamp / 1e6 ) -  firstTimeDataMs) / 100)
+                if  slot not in windowRttReset :
+                    windowRttReset.setdefault(slot, (1, 1))
+                else :
+                    (r, c) = windowRttReset[slot]
+                    windowRttReset[slot] = (r + 1, 1)
                     
                     
         elif event.name.startswith('strategyLog:') :
@@ -550,7 +575,7 @@ def chunksStatistics(filepath, start, stop, session, noProd):
                           mathDatasSent, bytesReceivedTimes, wlanSeg, wlanSegT, firstTimeData, bytesReceivedSecTimes, \
                           usedStrategies, history, packetSentSecTimes, packetReceivedSecTimes, putPacketSent, putPacketRec, packetReceivedErrorSecTimes, \
                           packetSentErrorSecTimes, rtts, rttsMean, rttTime, rttTimeMean, rttMin, rttMax, rttMinCalc, rttChunks, firstTimeDataMs, packetSize, \
-                          windowSizeTime, windowMultiplier, dataRejected, lifetimeTime)
+                          windowSizeTime, windowMultiplier, dataRejected, lifetimeTime, windowRttReset)
     else :
         print("Not enough data, skipping results generation for this session")
   
